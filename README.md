@@ -109,4 +109,5 @@ This separation means the CLI can be run and tested independently of the device 
 
 ## Acknowledgements
 
-Built on top of [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin.
+- Built on top of [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover) by Ava Johnson, a Kobo plugin for [Hardcover](https://hardcover.app) with a nearly identical architecture. Large portions of the hook and CLI infrastructure are derived from that project.
+- Uses [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin for Kobo plugin injection.
