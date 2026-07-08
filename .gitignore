@@ -1,0 +1,24 @@
+# Project-specific
+CLAUDE.md
+PLAN.md
+plan.md
+KoboRoot.tgz
+
+# Rust build output
+cli/target/
+cli/Cargo.lock
+
+# C++ build objects
+*.o
+*.moc
+*.moc.o
+
+# Compiled Qt resources
+*.rcc
+*.rcc.o
+
+# Generated PNGs (built from SVGs via `just build-res`)
+hook/res/*.png
+
+# Compiled shared library
+hook/libstorygraph.so

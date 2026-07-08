@@ -1,0 +1,113 @@
+#include <QJsonArray>
+#include <QVBoxLayout>
+
+#include <NickelHook.h>
+
+#include "../annotations/annotationsdialog.h"
+#include "../cli.h"
+#include "../insertjournal/insertjournaldialog.h"
+#include "journaldialog.h"
+#include "journalentry.h"
+
+void JournalDialog::show() { new JournalDialog(); }
+
+JournalDialog::JournalDialog() : Dialog("Reading Journal") {
+  setStyleSheet(R"(
+    [qApp_deviceIsTrilogy=true] QStackedWidget {
+      margin: 0 12px;
+    }
+    [qApp_deviceIsPhoenix=true] QStackedWidget {
+      margin: 0 16px;
+    }
+    [qApp_deviceIsDragon=true] QStackedWidget {
+      margin: 0 22px;
+    }
+    [qApp_deviceIsStorm=true] QStackedWidget {
+      margin: 0 25px;
+    }
+    [qApp_deviceIsDaylight=true] QStackedWidget {
+      margin: 0 28px;
+    }
+  )");
+
+  N3Dialog__enableFullViewMode(dialog);
+
+  QVBoxLayout *layout = new QVBoxLayout(this);
+  layout->setContentsMargins(0, 0, 0, 0);
+
+  QHBoxLayout *hbox = new QHBoxLayout();
+  layout->addLayout(hbox);
+  hbox->addStretch(1);
+
+  N3ButtonLabel *button = construct_N3ButtonLabel(this);
+  button->setProperty("primaryButton", true);
+  button->setText("Annotations");
+  hbox->addWidget(button, 0);
+  QObject::connect(button, SIGNAL(tapped(bool)), this, SLOT(annotations()));
+
+  button = construct_N3ButtonLabel(this);
+  button->setProperty("primaryButton", true);
+  button->setText("+ New entry");
+  hbox->addWidget(button, 0);
+  QObject::connect(button, SIGNAL(tapped(bool)), this, SLOT(newEntry()));
+
+  pages = new PagedStack(this);
+  layout->addWidget(pages, 1);
+  QObject::connect(pages, &PagedStack::requestPage, this, &JournalDialog::requestPage);
+
+  pages->next();
+}
+
+void JournalDialog::annotations() {
+  nh_log("JournalDialog::annotations()");
+  AnnotationsDialog::show();
+  dialog->deleteLater();
+}
+
+void JournalDialog::newEntry() {
+  nh_log("JournalDialog::newEntry()");
+  InsertJournalDialog::show();
+  dialog->deleteLater();
+}
+
+void JournalDialog::requestPage(int index) {
+  nh_log("JournalDialog::requestPage(%d)", index);
+
+  CLI *cli = CLI::listJournal(15, offset);
+  QObject::connect(cli, &CLI::response, this, &JournalDialog::response);
+}
+
+void JournalDialog::response(QJsonObject doc) {
+  QWidget *box = new QWidget(this);
+  QVBoxLayout *rows = new QVBoxLayout(box);
+  rows->setContentsMargins(0, 0, 0, 0);
+  rows->setSpacing(0);
+
+  QJsonArray results = doc.value("reading_journals").toArray();
+  int length = results.size();
+  int availableHeight = pages->getAvailableHeight();
+
+  int i = 0;
+  for (; i < length; i++) {
+    QJsonObject obj = results.at(i).toObject();
+    JournalEntry *entry = new JournalEntry(obj, pages);
+    if (i == 0) {
+      entry->setProperty("noBorder", true);
+    }
+
+    availableHeight -= entry->sizeHint().height();
+    if (availableHeight < 0)
+      break;
+
+    rows->addWidget(entry);
+  }
+
+  offset += i;
+
+  rows->addStretch(1);
+  pages->addPage(box);
+
+  if (i == length) {
+    pages->setTotal(pages->countPages());
+  }
+}

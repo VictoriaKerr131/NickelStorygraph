@@ -1,0 +1,123 @@
+﻿#include <QDate>
+#include <QFont>
+#include <QLabel>
+#include <QLocale>
+#include <QVBoxLayout>
+
+#include <NickelHook.h>
+
+#include "../files.h"
+#include "../widgets/elidedlabel.h"
+#include "journalentry.h"
+
+JournalEntry::JournalEntry(QJsonObject doc, QWidget *parent) : QFrame(parent) {
+  setStyleSheet(R"(
+    [qApp_deviceIsTrilogy=true] JournalEntry {
+      padding: 12px 0;
+    }
+    [qApp_deviceIsPhoenix=true] JournalEntry {
+      padding: 16px 0;
+    }
+    [qApp_deviceIsDragon=true] JournalEntry {
+      padding: 22px 0;
+    }
+    [qApp_deviceIsStorm=true] JournalEntry {
+      padding: 25px 0;
+    }
+    [qApp_deviceIsDaylight=true] JournalEntry {
+      padding: 28px 0;
+    }
+
+    JournalEntry {
+      border-top: 1px solid #666666;
+    }
+
+    JournalEntry[noBorder=true] {
+      border-top-width: 0;
+    }
+  )");
+
+  QVBoxLayout *layout = new QVBoxLayout(this);
+  layout->setContentsMargins(0, 0, 0, 0);
+
+  QString event = doc.value("event").toString();
+
+  QHBoxLayout *line = new QHBoxLayout();
+  layout->addLayout(line);
+  QLabel *icon = new QLabel(this);
+  line->addWidget(icon);
+  Label *label = new Label(Label::Small, "");
+  line->addWidget(label, 1);
+
+  if (event == "status_want_to_read") {
+    icon->setPixmap(QPixmap(Files::status_want_to_read));
+    label->setText("Saved as Want To Read");
+  } else if (event == "status_read") {
+    icon->setPixmap(QPixmap(Files::status_read));
+    label->setText("Marked as Read");
+  } else if (event == "user_book_read_started") {
+    icon->setPixmap(QPixmap(Files::user_book_read_started));
+    label->setText("Started reading");
+  } else if (event == "user_book_read_finished") {
+    icon->setPixmap(QPixmap(Files::user_book_read_finished));
+    label->setText("Finished reading");
+  } else if (event == "status_stopped") {
+    icon->setPixmap(QPixmap(Files::status_stopped));
+    label->setText("Stopped reading");
+  } else if (event == "progress_updated") {
+    icon->setPixmap(QPixmap(Files::progress_updated));
+    QJsonObject metadata = doc.value("metadata").toObject();
+    label->setText(QString("Updated progress from %1% → %2%")
+                       .arg(metadata.value("progress_was").toInt())
+                       .arg(metadata.value("progress").toInt()));
+  } else if (event == "rated") {
+    icon->setPixmap(QPixmap(Files::rated));
+    QJsonObject metadata = doc.value("metadata").toObject();
+    label->setText("Rated " + metadata.value("rating").toString());
+  } else if (event == "list_book") {
+    icon->setPixmap(QPixmap(Files::list_book));
+    QJsonObject metadata = doc.value("metadata").toObject();
+    label->setText(QString("Added to list <i>%1</i>").arg(metadata.value("list_name").toString()));
+  } else if (event == "prompt_book") {
+    icon->setPixmap(QPixmap(Files::prompt_book));
+    QJsonObject metadata = doc.value("metadata").toObject();
+    label->setText(QString("Answered prompt <i>%1</i>").arg(metadata.value("prompt").toString()));
+  } else if (event == "note") {
+    icon->setPixmap(QPixmap(Files::note));
+    label->setText("Saved a Note");
+
+    QString quoteText = doc.value("metadata").toObject().value("quote").toString();
+    if (!quoteText.isEmpty()) {
+      ElidedLabel *quoteLabel = new ElidedLabel(Label::Medium, quoteText, 5, this);
+      QFont italicFont = quoteLabel->font();
+      italicFont.setItalic(true);
+      quoteLabel->setFont(italicFont);
+      layout->addWidget(quoteLabel);
+    }
+    layout->addWidget(new ElidedLabel(Label::Medium, doc.value("entry").toString(), 5, this));
+  } else if (event == "quote") {
+    icon->setPixmap(QPixmap(Files::quote));
+    label->setText("Saved a Quote");
+
+    ElidedLabel *quoteLabel = new ElidedLabel(Label::Medium, doc.value("entry").toString(), 5, this);
+    QFont italicFont = quoteLabel->font();
+    italicFont.setItalic(true);
+    quoteLabel->setFont(italicFont);
+    layout->addWidget(quoteLabel);
+  } else if (event == "reviewed") {
+    icon->setPixmap(QPixmap(Files::reviewed));
+    label->setText("Reviewed");
+
+    QJsonObject metadata = doc.value("metadata").toObject();
+    layout->addWidget(new ElidedLabel(Label::Medium, metadata.value("review").toString(), 5, this));
+  } else {
+    label->setText("Unknown journal type " + event);
+  }
+
+  QString actionAt = QDate::fromString(
+    doc.value("action_at").toString().left(10), "yyyy-MM-dd"
+  ).toString(locale().dateFormat(QLocale::ShortFormat));
+  Label *actionAtLabel = new Label(Label::ExtraSmall, actionAt);
+  layout->addWidget(actionAtLabel, 0, Qt::AlignRight);
+  actionAtLabel->lower();
+}

@@ -1,0 +1,79 @@
+﻿#include <QApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QScreen>
+#include <QTextEdit>
+
+#include <NickelHook.h>
+
+#include "../synccontroller.h"
+#include "dialog.h"
+
+Dialog::Dialog(QString title) : QFrame() {
+  dialog = N3DialogFactory__getDialog(this, true);
+  N3Dialog__setTitle(dialog, title);
+
+  QScreen *screen = QApplication::primaryScreen();
+  QRect screenGeometry = screen->geometry();
+  dialog->setFixedSize(screenGeometry.width(), screenGeometry.height());
+
+  MainWindowController *mwc = MainWindowController__sharedInstance();
+  MainWindowController__pushView(mwc, dialog);
+
+  QObject::connect(SyncController::getInstance(), &SyncController::currentViewChanged, this,
+                   &Dialog::currentViewChanged);
+  QObject::connect(dialog, SIGNAL(closeTapped()), dialog, SLOT(deleteLater()));
+
+  dialog->show();
+}
+
+void Dialog::currentViewChanged(QString name) {
+  if (name != "ReadingView") {
+    dialog->deleteLater();
+  }
+}
+
+void Dialog::showKeyboard() { N3Dialog__showKeyboard(dialog); }
+
+void Dialog::hideKeyboard() { N3Dialog__hideKeyboard(dialog); }
+
+KeyboardFrame *Dialog::buildKeyboardFrame(TouchLineEdit *lineEdit, QString goText) {
+  KeyboardReceiver *receiver = construct_KeyboardReceiver(lineEdit);
+  KeyboardFrame *keyboard = buildKeyboardFrame(receiver, goText);
+  QObject::connect(lineEdit, SIGNAL(tapped()), this, SLOT(showKeyboard()));
+
+  return keyboard;
+}
+
+KeyboardFrame *Dialog::buildKeyboardFrame(QTextEdit *textEdit, QString goText) {
+  KeyboardReceiver *receiver = construct_KeyboardReceiver(textEdit);
+  KeyboardFrame *keyboard = buildKeyboardFrame(receiver, goText);
+
+  return keyboard;
+}
+
+KeyboardFrame *Dialog::buildKeyboardFrameHideOnly(QTextEdit *textEdit, QString goText) {
+  KeyboardReceiver *receiver = construct_KeyboardReceiver(textEdit);
+  KeyboardFrame *keyboard = N3Dialog__keyboardFrame(dialog);
+
+  SearchKeyboardController *ctl = KeyboardFrame__createKeyboard(keyboard, 0, locale());
+  SearchKeyboardController__setReceiver(ctl, receiver, false);
+  SearchKeyboardController__setGoText(ctl, goText);
+
+  QObject::connect(ctl, SIGNAL(commitRequested()), this, SLOT(hideKeyboard()));
+
+  return keyboard;
+}
+
+KeyboardFrame *Dialog::buildKeyboardFrame(KeyboardReceiver *receiver, QString goText) {
+  KeyboardFrame *keyboard = N3Dialog__keyboardFrame(dialog);
+
+  SearchKeyboardController *ctl = KeyboardFrame__createKeyboard(keyboard, 0, locale());
+  SearchKeyboardController__setReceiver(ctl, receiver, false);
+  SearchKeyboardController__setGoText(ctl, goText);
+
+  QObject::connect(ctl, SIGNAL(commitRequested()), this, SLOT(hideKeyboard()));
+  QObject::connect(ctl, SIGNAL(commitRequested()), this, SLOT(commit()));
+
+  return keyboard;
+}

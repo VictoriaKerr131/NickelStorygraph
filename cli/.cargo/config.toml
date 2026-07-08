@@ -1,0 +1,7 @@
+[target.arm-unknown-linux-gnueabihf]
+linker = "arm-nickel-linux-gnueabihf-gcc"
+
+[env]
+CC_arm_unknown_linux_gnueabihf = "arm-nickel-linux-gnueabihf-gcc"
+CXX_arm_unknown_linux_gnueabihf = "arm-nickel-linux-gnueabihf-g++"
+AR_arm_unknown_linux_gnueabihf = "arm-nickel-linux-gnueabihf-ar"
