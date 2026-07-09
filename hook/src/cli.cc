@@ -123,6 +123,18 @@ CLI::CLI(QStringList arguments, Options options, QObject *parent)
 
   if (WirelessWorkflowManager__isInternetAccessible(wfm)) {
     networkConnected();
+  } else if (options.silent) {
+    // For silent syncs, don't initiate a WiFi connection — calling
+    // connectWirelessSilently can block the event loop when Nickel's own WiFi
+    // workflow is mid-cancel, causing a watchdog kill. Instead, piggyback on
+    // any connection Nickel is already establishing; give up after 5s if none.
+    WirelessManager *wm = WirelessManager__sharedInstance();
+    QObject::connect(wm, SIGNAL(networkConnected()), this, SLOT(networkConnected()));
+
+    timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &CLI::connectingFailed);
+    timer->setSingleShot(true);
+    timer->start(5000);
   } else {
     QObject::connect(wfm, SIGNAL(connectingFailed()), this, SLOT(connectingFailed()));
 
@@ -139,12 +151,7 @@ CLI::CLI(QStringList arguments, Options options, QObject *parent)
     // Yield to caller so signals can be setup before a possible connectingFailed() is triggered
     QTimer::singleShot(0, this, [options] {
       WirelessWorkflowManager *wfm = WirelessWorkflowManager__sharedInstance();
-
-      if (options.silent) {
-        WirelessWorkflowManager__connectWirelessSilently(wfm);
-      } else {
-        WirelessWorkflowManager__connectWireless(wfm, false, false);
-      }
+      WirelessWorkflowManager__connectWireless(wfm, false, false);
     });
   }
 }

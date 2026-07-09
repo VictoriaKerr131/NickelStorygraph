@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::config::CONFIG;
 use crate::log;
-use crate::storygraph::{self, Book};
+use crate::storygraph::{self, Book, title_match_score};
 use crate::utils::{VERSION, book_not_found, normalize_identifiers};
 
 /// Update reading progress for a book.
@@ -35,6 +35,20 @@ pub fn run(args: Update) -> Result<()> {
     book_id
   } else {
     let meta = book_title_query(content_id.as_deref());
+
+    // Before doing an ISBN/search lookup, check if the book is already on the user's
+    // currently-reading shelf. If so, link to that edition and let the hook ask the
+    // user whether to keep StoryGraph's progress or push Kobo's.
+    if let Some((ref title, _)) = meta {
+      if let Ok(Some((shelf_id, shelf_progress))) = storygraph::find_on_shelf(title) {
+        log!("BEGIN_JSON\n{}", serde_json::json!({
+          "resolved_book_id": shelf_id,
+          "needs_shelf_confirmation": true,
+          "progress_percent": shelf_progress,
+        }));
+        return Ok(());
+      }
+    }
 
     let found = isbns
       .iter()
@@ -67,29 +81,6 @@ pub fn run(args: Update) -> Result<()> {
   resp["resolved_book_id"] = json!(book_id);
   log!("BEGIN_JSON\n{}", resp);
   Ok(())
-}
-
-/// Returns what fraction of the meaningful words in `query_title` appear in `result_title`.
-/// Stop words and single-character tokens are excluded from scoring.
-fn title_match_score(query_title: &str, result_title: &str) -> f32 {
-  const STOPS: &[&str] = &["the", "a", "an", "of", "in", "by", "to", "and", "or", "for", "at", "its", "is"];
-
-  let tokenize = |s: &str| -> Vec<String> {
-    s.to_lowercase()
-      .split(|c: char| !c.is_alphabetic())
-      .filter(|w| w.len() > 1 && !STOPS.contains(w))
-      .map(str::to_owned)
-      .collect()
-  };
-
-  let query_words = tokenize(query_title);
-  if query_words.is_empty() {
-    return 0.0;
-  }
-
-  let result_words: std::collections::HashSet<String> = tokenize(result_title).into_iter().collect();
-  let matches = query_words.iter().filter(|w| result_words.contains(*w)).count();
-  matches as f32 / query_words.len() as f32
 }
 
 /// Picks the best match from `results` for `title`, requiring at least 50% of meaningful

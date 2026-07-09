@@ -45,7 +45,7 @@ void (*TouchLabel__constructor)(TouchLabel *_this, QWidget *parent, QFlags<Qt::W
 void (*TouchLabel__setHitStateEnabled)(TouchLabel *_this, bool enabled);
 
 TouchLabel *construct_TouchLabel(QWidget *parent) {
-  TouchLabel *label = reinterpret_cast<TouchLabel *>(calloc(1, 512));
+  TouchLabel *label = reinterpret_cast<TouchLabel *>(calloc(1, 2048));
   TouchLabel__constructor(label, parent, 0);
   return label;
 }
@@ -261,6 +261,8 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
   syncController->title = Content__getTitle(volume);
   syncController->author = Content__getAttribution(volume);
 
+  nh_log("ReadingController::setVolume contentId=%s", qPrintable(syncController->contentId));
+
   MainWindowController *mwc = MainWindowController__sharedInstance();
   QWidget *cv = MainWindowController__currentView(mwc);
 
@@ -268,6 +270,7 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
     QWidget *parent = cv ? cv->parentWidget() : nullptr;
     if (parent && QString(parent->metaObject()->className()) == "QStackedWidget") {
       stackedWidget = static_cast<QStackedWidget *>(parent);
+      nh_log("ReadingController::setVolume connecting stackedWidget=%p", stackedWidget);
       QObject::connect(stackedWidget, &QStackedWidget::currentChanged, SyncController::getInstance(),
                        &SyncController::currentViewIndexChanged);
       QObject::connect(stackedWidget, &QObject::destroyed, handleStackedWidgetDestroyed);
@@ -276,16 +279,24 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
     }
   }
 
-  return ReadingController__setVolume(_this, volume, bookmark);
+  nh_log("ReadingController::setVolume calling original");
+  ReadingController__setVolume(_this, volume, bookmark);
+  nh_log("ReadingController::setVolume original returned");
 }
 
 void injectMenuWidget(ReadingMenuView *parent) {
   QHBoxLayout *childLayout = parent->findChild<QHBoxLayout *>("bottomHorizontalLayout");
   QLabel *settingsIcon = parent->findChild<QLabel *>("settingsIcon");
 
+  nh_log("injectMenuWidget: childLayout=%p settingsIcon=%p", childLayout, settingsIcon);
+
   if (childLayout && settingsIcon) {
-    MenuController *ctl = new MenuController(settingsIcon->height(), parent);
+    int h = settingsIcon->height();
+    nh_log("injectMenuWidget: creating MenuController height=%d", h);
+    MenuController *ctl = new MenuController(h, parent);
+    nh_log("injectMenuWidget: inserting icon");
     childLayout->insertWidget(childLayout->count() - 1, ctl->icon);
+    nh_log("injectMenuWidget: done");
   } else {
     nh_log("Error: unable to find bottomHorizontalLayout and settingsIcon");
   }
@@ -295,7 +306,9 @@ extern "C" __attribute__((visibility("default"))) void _nh_ReadingMenuView__cons
                                                                                         QWidget *parent, bool unknown) {
   nh_log("ReadingMenuView::ReadingMenuView(%p, %p, %s)", _this, parent, unknown ? "true" : "false");
   ReadingMenuView__constructor(_this, parent, unknown);
+  nh_log("ReadingMenuView::ReadingMenuView original returned, injecting");
   injectMenuWidget(parent);
+  nh_log("ReadingMenuView::ReadingMenuView inject done");
 }
 
 extern "C" __attribute__((visibility("default"))) void

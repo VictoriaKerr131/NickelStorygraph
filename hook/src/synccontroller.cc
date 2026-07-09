@@ -26,6 +26,7 @@ void SyncController::currentViewIndexChanged(int index) {
 
   MainWindowController *mwc = MainWindowController__sharedInstance();
   QWidget *cv = MainWindowController__currentView(mwc);
+  if (!cv) return;
   QString name = cv->objectName();
   nh_log("Current view changed to %s last view was %s", qPrintable(name), qPrintable(lastViewName));
 
@@ -60,6 +61,7 @@ void SyncController::pageChanged() {
 
   MainWindowController *mwc = MainWindowController__sharedInstance();
   QWidget *cv = MainWindowController__currentView(mwc);
+  if (!cv) return;
   QString name = cv->objectName();
   if (name == "ReadingView") {
     queue->updateReadProgress(contentId);

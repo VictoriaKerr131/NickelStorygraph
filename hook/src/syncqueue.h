@@ -32,6 +32,11 @@ private:
   int lastProgress = 0;
   bool pendingReviewPrompt = false;
   QHash<QString, int> queue;
+  QHash<QString, int> retryCount;
+
+  bool pendingShelfConfirmation = false;
+  int pendingShelfProgress = 0;
 
   void showReviewPrompt();
+  void showShelfConfirmation();
 };

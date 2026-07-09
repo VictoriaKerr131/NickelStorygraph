@@ -15,6 +15,7 @@ SyncQueue::SyncQueue(QObject *parent) : QObject(parent) {};
 void SyncQueue::updateReadProgress(QString contentId) {
   MainWindowController *mwc = MainWindowController__sharedInstance();
   QWidget *cv = MainWindowController__currentView(mwc);
+  if (!cv) return;
 
   int progress = ReadingView__getCalculatedReadProgress(cv);
   if (progress == 99) {
@@ -70,6 +71,15 @@ void SyncQueue::run(QString contentId, bool manual) {
     return;
   }
 
+  // Only sync forward — don't overwrite a higher StoryGraph progress if the user
+  // navigated back in the book (e.g. returned to check an earlier chapter).
+  if (!manual && progress < Settings::getInstance()->getLastProgress(contentId)) {
+    nh_log("Skipping backward sync for %s: %d%% < last synced %d%%",
+           qPrintable(contentId), progress, Settings::getInstance()->getLastProgress(contentId));
+    finished();
+    return;
+  }
+
   this->contentId = contentId;
   this->lastProgress = progress;
 
@@ -104,15 +114,40 @@ void SyncQueue::run(QString contentId, bool manual) {
     if (statusId > 0) {
       Settings::getInstance()->setStatus(contentId, statusId);
     }
+    if (doc.value("needs_shelf_confirmation").toBool()) {
+      pendingShelfConfirmation = true;
+      pendingShelfProgress = doc.value("progress_percent").toInt(0);
+    }
     if (lastProgress == 100)
       pendingReviewPrompt = true;
   });
   QObject::connect(cli, &CLI::success, this, &SyncQueue::success);
   QObject::connect(cli, &CLI::failure, this, &SyncQueue::closeDialog);
-  QObject::connect(cli, &CLI::failure, this, &SyncQueue::finished);
+  if (manual) {
+    QObject::connect(cli, &CLI::failure, this, &SyncQueue::finished);
+  } else {
+    QObject::connect(cli, &CLI::failure, this, [this, contentId]() {
+      WirelessWorkflowManager *wfm = WirelessWorkflowManager__sharedInstance();
+      if (!WirelessWorkflowManager__isInternetAccessible(wfm) && lastProgress > 0 && retryCount[contentId] < 3) {
+        retryCount[contentId]++;
+        queue[contentId] = lastProgress;
+        nh_log("WiFi unavailable, retrying %s in 30s (attempt %d/3)", qPrintable(contentId), retryCount[contentId]);
+        QTimer::singleShot(30000, this, &SyncQueue::prepareNext);
+      } else {
+        retryCount.remove(contentId);
+        finished();
+      }
+    });
+  }
 }
 
 void SyncQueue::success() {
+  retryCount.remove(contentId);
+
+  if (pendingShelfConfirmation) {
+    showShelfConfirmation();
+    return;
+  }
   QString syncMode = Settings::getInstance()->getSyncBookmarks();
   bool syncBookmarks = (syncMode == "always") ||
                        (syncMode == "manual" && dialog != nullptr) ||
@@ -141,6 +176,42 @@ void SyncQueue::success() {
   } else if (prompt) {
     showReviewPrompt();
   }
+}
+
+void SyncQueue::showShelfConfirmation() {
+  closeDialog();
+
+  int shelfProgress = pendingShelfProgress;
+  pendingShelfConfirmation = false;
+  pendingShelfProgress = 0;
+
+  ConfirmationDialog *prompt = ConfirmationDialogFactory__getConfirmationDialog(nullptr);
+  ConfirmationDialog__setTitle(prompt, "Already on your shelf");
+  ConfirmationDialog__setText(prompt,
+      QString("Your StoryGraph shelf has this book at %1%. Keep that progress?").arg(shelfProgress));
+  ConfirmationDialog__setAcceptButtonText(prompt, "Keep StoryGraph progress");
+  ConfirmationDialog__setRejectButtonText(prompt, "Sync from Kobo");
+  ConfirmationDialog__showCloseButton(prompt, false);
+
+  QObject::connect(prompt, &QDialog::accepted, this, [this, shelfProgress, prompt]() {
+    prompt->deleteLater();
+    Settings::getInstance()->setLastProgress(contentId, shelfProgress);
+    success();
+  });
+
+  QObject::connect(prompt, &QDialog::rejected, this, [this, prompt]() {
+    prompt->deleteLater();
+    CLI::Options opts;
+    opts.silent = false;
+    opts.icon = true;
+    opts.contentId = contentId;
+    CLI *cli = CLI::update(lastProgress, opts);
+    QObject::connect(cli, &CLI::success, this, &SyncQueue::success);
+    QObject::connect(cli, &CLI::failure, this, &SyncQueue::closeDialog);
+    QObject::connect(cli, &CLI::failure, this, &SyncQueue::finished);
+  });
+
+  prompt->open();
 }
 
 void SyncQueue::showReviewPrompt() {

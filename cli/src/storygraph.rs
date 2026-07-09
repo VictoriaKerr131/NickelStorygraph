@@ -798,6 +798,78 @@ pub fn list_editions(book_id: &str, reading_format: i32, language: &str) -> Resu
   Ok(editions)
 }
 
+/// Returns what fraction of the meaningful words in `query_title` appear in `result_title`.
+pub fn title_match_score(query_title: &str, result_title: &str) -> f32 {
+  const STOPS: &[&str] = &["the", "a", "an", "of", "in", "by", "to", "and", "or", "for", "at", "its", "is"];
+
+  let tokenize = |s: &str| -> Vec<String> {
+    s.to_lowercase()
+      .split(|c: char| !c.is_alphabetic())
+      .filter(|w| w.len() > 1 && !STOPS.contains(w))
+      .map(str::to_owned)
+      .collect()
+  };
+
+  let query_words = tokenize(query_title);
+  if query_words.is_empty() {
+    return 0.0;
+  }
+
+  let result_words: std::collections::HashSet<String> = tokenize(result_title).into_iter().collect();
+  let matches = query_words.iter().filter(|w| result_words.contains(*w)).count();
+  matches as f32 / query_words.len() as f32
+}
+
+/// Searches the user's currently-reading shelf for a book matching `query_title` without
+/// needing a book_id first. Parses shelf HTML once; returns `(book_id, progress_percent)`
+/// for the best title match (score ≥ 0.5), or `None` if nothing matches.
+pub fn find_on_shelf(query_title: &str) -> Result<Option<(String, u32)>> {
+  assert_credentials();
+  let user = get_user()?;
+  let html = get(&format!("/currently-reading/{}", user.slug))?;
+  let doc = Html::parse_document(&html);
+
+  let pane_sel     = Selector::parse(".book-pane").expect("valid");
+  let title_sel    = Selector::parse("h3.font-bold a").expect("valid");
+  let progress_sel = Selector::parse("input.read-status-last-reached-percent").expect("valid");
+
+  let mut best: Option<(String, f32, u32)> = None;
+
+  for pane in doc.select(&pane_sel) {
+    let book_id = match pane.value().attr("data-book-id") {
+      Some(id) if !id.is_empty() => id.to_owned(),
+      _ => continue,
+    };
+
+    let title: String = pane
+      .select(&title_sel)
+      .next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .unwrap_or_default();
+
+    if title.is_empty() {
+      continue;
+    }
+
+    let score = title_match_score(query_title, &title);
+    if score >= 0.5 {
+      let progress: u32 = pane
+        .select(&progress_sel)
+        .next()
+        .and_then(|el| el.value().attr("value"))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+      if best.as_ref().map_or(true, |(_, s, _)| score > *s) {
+        best = Some((book_id, score, progress));
+      }
+    }
+  }
+
+  debug_log!("find_on_shelf({query_title:?}): {:?}", best.as_ref().map(|(id, s, p)| (id, s, p)));
+  Ok(best.map(|(id, _, progress)| (id, progress)))
+}
+
 /// Finds which edition of this book the user currently has on their StoryGraph
 /// currently-reading shelf. Fetches the shelf page and looks for any edition UUID
 /// that matches a known edition of the same work.
