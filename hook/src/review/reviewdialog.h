@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QResizeEvent>
 #include <QLabel>
 #include <QList>
 #include <QScrollArea>
@@ -28,10 +29,18 @@ public Q_SLOTS:
   void moodTapped();
   void questionTapped();
 
+  void scrollPageUp();
+  void scrollPageDown();
+  void updateScrollButtons();
+
+protected:
+  void resizeEvent(QResizeEvent *event) override;
+
 private:
   ReviewDialog();
 
   void updateRatingLabel();
+  void repositionScrollButtons();
 
   float rating = 0;
   QList<int> moods;
@@ -48,4 +57,6 @@ private:
   QLabel *ratingLabel = nullptr;
   Rating *ratingWidget = nullptr;
   TouchTextEdit *touchText = nullptr;
+  TouchLabel *scrollUpBtn = nullptr;
+  TouchLabel *scrollDownBtn = nullptr;
 };

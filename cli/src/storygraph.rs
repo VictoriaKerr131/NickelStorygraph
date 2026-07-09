@@ -667,7 +667,7 @@ pub fn submit_review(
 /// Returns all non-audio editions of a book from its `/editions` page.
 /// Used by the hook's edition picker so the user can switch to the correct
 /// physical or digital edition for accurate page tracking.
-pub fn list_editions(book_id: &str) -> Result<Vec<Edition>> {
+pub fn list_editions(book_id: &str, reading_format: i32, language: &str) -> Result<Vec<Edition>> {
   assert_credentials();
   let html = get(&format!("/books/{book_id}/editions"))?;
   let doc = Html::parse_document(&html);
@@ -777,7 +777,24 @@ pub fn list_editions(book_id: &str) -> Result<Vec<Edition>> {
     });
   }
 
-  debug_log!("list_editions({book_id}): returning {} editions", editions.len());
+  let is_digital = |f: &str| {
+    let f = f.to_lowercase();
+    f.contains("ebook") || f.contains("e-book") || f.contains("epub")
+      || f.contains("kindle") || f.contains("digital") || f.contains("mobi")
+      || f.contains("pdf")
+  };
+
+  let editions: Vec<Edition> = editions
+    .into_iter()
+    .filter(|e| match reading_format {
+      1 => !is_digital(&e.format), // Print
+      4 => is_digital(&e.format),  // E-Book
+      _ => true,                   // All
+    })
+    .filter(|e| language.is_empty() || e.language.eq_ignore_ascii_case(language))
+    .collect();
+
+  debug_log!("list_editions({book_id}): returning {} editions (format={reading_format}, lang={language:?})", editions.len());
   Ok(editions)
 }
 
@@ -787,7 +804,7 @@ pub fn list_editions(book_id: &str) -> Result<Vec<Edition>> {
 pub fn find_current_edition(book_id: &str) -> Result<String> {
   assert_credentials();
 
-  let editions = list_editions(book_id)?;
+  let editions = list_editions(book_id, 0, "")?;
   let user = get_user()?;
   let shelf_html = get(&format!("/currently-reading/{}", user.slug))?;
 
@@ -818,7 +835,7 @@ pub fn prefer_digital_edition(book_id: &str) -> Result<String> {
     return Ok(book_id.to_owned());
   }
 
-  let editions = list_editions(book_id)?;
+  let editions = list_editions(book_id, 0, "")?;
   Ok(editions
     .into_iter()
     .find(|e| e.format.to_lowercase().contains("digital"))

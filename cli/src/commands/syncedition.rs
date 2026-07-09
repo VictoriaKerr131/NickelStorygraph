@@ -23,7 +23,9 @@ pub fn run(args: SyncEdition) -> Result<()> {
   log!("{} {:?}", &*VERSION, args);
   let (book_id, _) = normalize_identifiers(args.linked_id, args.content_id.as_deref());
   anyhow::ensure!(!book_id.is_empty(), "No linked book found. Please link a book first.");
-  let found_id = storygraph::find_current_edition(&book_id)?;
+  let found_id = storygraph::find_current_edition(&book_id).unwrap_or_else(|_| {
+    panic!("This book isn't on your currently reading shelf on StoryGraph. Add it there to sync the edition.")
+  });
   log!("BEGIN_JSON\n{}", json!({ "book_id": found_id }));
   Ok(())
 }

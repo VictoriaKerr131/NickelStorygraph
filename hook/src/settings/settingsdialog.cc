@@ -218,10 +218,14 @@ QFrame *SettingsDialog::buildGeneral() {
   layout->addWidget(checkboxRow);
 
   MenuRow *menuRow = new MenuRow("Sync annotations to reading journal", MenuRowType::Menu,
-                                 {{"Always", "always"}, {"Never", "never"}, {"Once the book is finished", "finished"}},
+                                 {{"Always", "always"}, {"Manual only", "manual"}, {"On finish", "finished"}, {"Never", "never"}},
                                  {}, Settings::getInstance()->getSyncBookmarks());
   QObject::connect(menuRow, &MenuRow::triggered, this, &SettingsDialog::setSyncBookmarks);
   layout->addWidget(menuRow);
+
+  checkboxRow = new CheckboxRow("Simple review (rating and thoughts only)", Settings::getInstance()->getSimpleReview());
+  QObject::connect(checkboxRow, &CheckboxRow::triggered, this, &SettingsDialog::setSimpleReview);
+  layout->addWidget(checkboxRow);
 
   return frame;
 }
@@ -352,6 +356,8 @@ void SettingsDialog::clearLastSynced() {
   int progress = settings->getLastProgress(contentId);
   row->setValue(progress <= 0 ? "Never" : QString::number(progress).append("%"));
 }
+
+void SettingsDialog::setSimpleReview(bool value) { Settings::getInstance()->setSimpleReview(value); }
 
 void SettingsDialog::setDebug(bool value) { Settings::getInstance()->setDebug(value); }
 

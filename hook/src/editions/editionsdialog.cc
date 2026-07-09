@@ -65,12 +65,6 @@ EditionsDialog::EditionsDialog(QString bookId) : Dialog("Manually link book"), b
   hbox->addWidget(formatGroup);
   QObject::connect(formatGroup, &ButtonGroup::valueChanged, this, &EditionsDialog::readingFormatChanged);
 
-  langButton = construct_N3ButtonLabel(this);
-  langButton->setText("Any language");
-  langButton->setProperty("primaryButton", true);
-  hbox->addWidget(langButton);
-  QObject::connect(langButton, SIGNAL(tapped(bool)), this, SLOT(showLangMenu()));
-
   hbox->addStretch(1);
 
   pages = new PagedStack(this);
@@ -85,12 +79,11 @@ void EditionsDialog::request() {
   editionsInitialized = false;
   pages->clear();
 
-  CLI *cli = CLI::listEditions(bookId, readingFormat.toInt(), lang);
+  CLI *cli = CLI::listEditions(bookId, readingFormat.toInt(), "");
   QObject::connect(cli, &CLI::response, this, &EditionsDialog::response);
 }
 
 void EditionsDialog::response(QJsonObject doc) {
-  languages = doc.value("languages").toArray();
   editions = doc.value("editions").toArray();
   editionsInitialized = true;
   pages->next();
@@ -142,24 +135,6 @@ void EditionsDialog::requestPage(int index) {
   if (index == 1) {
     pages->setTotal(qCeil((float)length / offset));
   }
-}
-
-void EditionsDialog::showLangMenu() {
-  QList<Item> items = {{"Any language", ""}};
-
-  for (QJsonValue value : languages) {
-    QString languages = value.toString();
-    items.append({languages, languages});
-  }
-
-  NickelTouchMenu *menu = MenuController::showMenu(items, langButton, 0);
-  QWidget::connect(menu, &QMenu::triggered, this, &EditionsDialog::langTriggered);
-}
-
-void EditionsDialog::langTriggered(QAction *action) {
-  lang = action->data().toString();
-  langButton->setText(lang.isEmpty() ? "Any language" : lang);
-  request();
 }
 
 void EditionsDialog::readingFormatChanged(QVariant value) {

@@ -150,7 +150,7 @@ CLI::CLI(QStringList arguments, Options options, QObject *parent)
 }
 
 CLI::~CLI() {
-  if (icon != nullptr) {
+  if (!icon.isNull()) {
     icon->deleteLater();
   }
 }
@@ -175,7 +175,10 @@ void CLI::connectingFailed() {
 void CLI::showIcon(const char *path) {
   if (icon == nullptr) {
     MainWindowController *mwc = MainWindowController__sharedInstance();
-    QWidget *window = MainWindowController__currentView(mwc)->window();
+    QWidget *cv = MainWindowController__currentView(mwc);
+    if (!cv) return;
+    QWidget *window = cv->window();
+    if (!window) return;
     icon = new QLabel(window);
     icon->resize(90, 90);
     icon->move(window->width() - 144, window->height() - 144);
@@ -226,7 +229,9 @@ void CLI::processFinished(int exitCode) {
   if (exitCode > 0) {
     QByteArray stderr = process->readAllStandardError();
     nh_log("Error from command line \"%s\"", qPrintable(stderr));
-    ConfirmationDialogFactory__showErrorDialog("StoryGraph", QString(stderr));
+    if (!options.silent) {
+      ConfirmationDialogFactory__showErrorDialog("StoryGraph", QString(stderr));
+    }
     failure();
     deleteLater();
     return;

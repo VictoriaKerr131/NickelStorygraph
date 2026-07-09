@@ -14,8 +14,6 @@ public:
 
 public Q_SLOTS:
   void readingFormatChanged(QVariant value);
-  void showLangMenu();
-  void langTriggered(QAction *action);
   void requestPage(int index);
   void response(QJsonObject doc);
 
@@ -28,15 +26,12 @@ private:
 
   void request();
 
-  N3ButtonLabel *langButton = nullptr;
   PagedStack *pages = nullptr;
 
   QString bookId = 0;
   QVariant readingFormat = 4;
-  QString lang = "";
 
   int offset = 0;
   bool editionsInitialized = false;
   QJsonArray editions;
-  QJsonArray languages;
 };

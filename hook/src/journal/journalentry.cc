@@ -49,6 +49,8 @@ JournalEntry::JournalEntry(QJsonObject doc, QWidget *parent) : QFrame(parent) {
   Label *label = new Label(Label::Small, "");
   line->addWidget(label, 1);
 
+  bool entryShown = false;
+
   if (event == "status_want_to_read") {
     icon->setPixmap(QPixmap(Files::status_want_to_read));
     label->setText("Saved as Want To Read");
@@ -95,6 +97,7 @@ JournalEntry::JournalEntry(QJsonObject doc, QWidget *parent) : QFrame(parent) {
       layout->addWidget(quoteLabel);
     }
     layout->addWidget(new ElidedLabel(Label::Medium, doc.value("entry").toString(), 5, this));
+    entryShown = true;
   } else if (event == "quote") {
     icon->setPixmap(QPixmap(Files::quote));
     label->setText("Saved a Quote");
@@ -104,14 +107,23 @@ JournalEntry::JournalEntry(QJsonObject doc, QWidget *parent) : QFrame(parent) {
     italicFont.setItalic(true);
     quoteLabel->setFont(italicFont);
     layout->addWidget(quoteLabel);
+    entryShown = true;
   } else if (event == "reviewed") {
     icon->setPixmap(QPixmap(Files::reviewed));
     label->setText("Reviewed");
 
     QJsonObject metadata = doc.value("metadata").toObject();
     layout->addWidget(new ElidedLabel(Label::Medium, metadata.value("review").toString(), 5, this));
+    entryShown = true;
   } else {
     label->setText("Unknown journal type " + event);
+  }
+
+  if (!entryShown) {
+    QString entry = doc.value("entry").toString();
+    if (!entry.isEmpty()) {
+      layout->addWidget(new ElidedLabel(Label::Medium, entry, 5, this));
+    }
   }
 
   QString actionAt = QDate::fromString(

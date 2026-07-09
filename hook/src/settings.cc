@@ -149,4 +149,11 @@ void Settings::setDebug(bool value) {
 
 bool Settings::getDebug() { return config->value("debug").toBool(); }
 
+void Settings::setSimpleReview(bool value) {
+  if (value) config->setValue("simple_review", value);
+  else       config->remove("simple_review");
+}
+
+bool Settings::getSimpleReview() { return config->value("simple_review", false).toBool(); }
+
 bool Settings::is24HourClock() { return kobo->value("ApplicationPreferences/is24HourClock").toBool(); }

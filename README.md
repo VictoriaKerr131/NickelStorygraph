@@ -2,23 +2,37 @@
 
 A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygraph.com). Syncs your reading progress automatically, logs highlights and notes as journal entries, and lets you manage your StoryGraph library directly from your device.
 
+> **Note:** Wi-Fi is required for all StoryGraph features. Because StoryGraph has no public API, this plugin works by scraping the website directly — it may break if StoryGraph makes changes to their UI.
+
 ## Features
 
 - **Progress sync** — automatically updates your StoryGraph reading progress as you read, configurable by threshold or on book close
 - **Auto-link** — identifies the correct StoryGraph digital edition via ISBN or title/author search when you open a book for the first time
 - **Book status** — set Want to Read, Currently Reading, Paused, Read, or Did Not Finish from the device; rereading is detected automatically when you re-open a finished book
-- **Reading journal** — view your StoryGraph journal and add new entries with notes and privacy settings
+- **Reading journal** — view your StoryGraph journal and add new entries with notes
 - **Annotations** — sync Kobo highlights and notes to your StoryGraph journal
-- **Ratings & reviews** — rate books (quarter-star), write reviews, tag moods, and answer book property questions; prompted automatically when you finish a book
+- **Ratings & reviews** — rate books (quarter-star), write reviews, tag moods, and answer book property questions; prompted automatically when you finish a book on your Kobo. Enable **Simple review** in Settings to show only the rating and thoughts fields
 - **Edition management** — manually link to any edition, switch editions, or sync your edition from changes made on the StoryGraph website
+
+## Screenshots
+
+<!-- Add screenshots here -->
 
 ## Installation
 
 1. Download `KoboRoot.tgz` from the [releases page](../../releases).
 2. Connect your Kobo to your computer via USB.
-3. Copy `KoboRoot.tgz` into the `.kobo/` folder on the device root.
+3. Copy `KoboRoot.tgz` into the `.kobo/` folder on the device root. The `.kobo` folder may be hidden — on Windows, enable "Show hidden items" in File Explorer; on macOS, press `Cmd+Shift+.` in Finder.
 4. Safely eject the Kobo — it will install the plugin automatically on reconnect.
-5. Copy `config_example.ini` from `mnt/onboard/.adds/NickelStorygraph/` to the same folder, rename it to `config.ini`, and fill in your credentials (see below).
+5. Once the Kobo restarts, reconnect via USB. Open the `.adds/NickelStorygraph/` folder on the device, copy `config_example.ini`, rename the copy to `config.ini`, and fill in your credentials (see below).
+
+## Uninstall
+
+1. Connect your Kobo via USB.
+2. Create an empty file named `NickelStorygraph_uninstall` in the root of the Kobo's internal storage (the same level as the `KOBOeReader` folder you see when you plug it in).
+3. Safely eject the Kobo — the plugin will remove itself on reconnect and the file will be deleted automatically.
+
+Alternatively, delete `.adds/NickelStorygraph/` from the device's internal storage manually and restart the Kobo.
 
 ## Configuration
 
@@ -35,6 +49,8 @@ user_slug = yourname
 
 To get your cookies, log in to StoryGraph in a browser, open DevTools (`F12`), go to **Application → Storage → Cookies → `https://app.thestorygraph.com`**, and copy the values for `_storygraph_session` and `remember_user_token`.
 
+Session cookies expire periodically. If syncing stops working, update these values in `config.ini` with fresh cookies from your browser.
+
 ### Key options
 
 | Option | Default | Description |
@@ -42,12 +58,12 @@ To get your cookies, log in to StoryGraph in a browser, open DevTools (`F12`), g
 | `auto_sync_default` | `false` | Whether auto-sync is enabled for new books by default |
 | `sync_on_close` | `always` | When to auto-sync: `always`, `never`, or a percentage threshold (e.g. `5`) |
 | `threshold` | `20` | Sync while reading if progress changes by more than this many percentage points |
-| `sync_bookmarks` | `always` | When to sync highlights/notes: `always`, `never`, or `finished` |
+| `sync_bookmarks` | `always` | When to sync highlights/notes: `always`, `manual` (only on manual sync), `finished` (only on book completion), or `never` |
 | `sync_daily` | off | Hour of day to sync even if asleep (1–24, e.g. `2` for 2am) |
 
 ## Usage
 
-Open any book and tap the StoryGraph icon in the toolbar to access the menu:
+Open any book and tap the StoryGraph icon in the reading toolbar at the top of the screen to access the menu. **Auto-sync is disabled per book by default** — use **Enable auto-sync** from the menu the first time you open a book, or set `auto_sync_default = true` in `config.ini` to enable it automatically for all books.
 
 - **Sync now** — immediately push your current reading progress
 - **Enable / Disable auto-sync** — toggle automatic syncing for this book
@@ -69,6 +85,20 @@ The first time a book is synced, NickelStorygraph looks up the correct StoryGrap
 4. Saves the resolved edition ID so all subsequent syncs are instant
 
 If a book can't be found automatically, a prompt appears to link it manually. Use **Book management → Sync edition from web** if you later change editions on StoryGraph's website.
+
+## Troubleshooting
+
+**The StoryGraph icon doesn't appear when I open a book.**
+The plugin may not have installed correctly. Reconnect the Kobo via USB and confirm that `.adds/NickelStorygraph/nickelstoregraph.so` exists on the device. If the file is missing, repeat the installation steps.
+
+**Syncing does nothing / I get an error about credentials.**
+Your session cookies have expired. Log back in to StoryGraph in a browser, copy fresh values for `_storygraph_session` and `remember_user_token`, and update `config.ini`.
+
+**A book can't be found or links to the wrong edition.**
+Use **Book management → Manually link book** to search for the correct edition and link it. Once linked, all future syncs use that edition directly.
+
+**Something else is broken.**
+Go to **Settings → Save system logs**, then reconnect the Kobo via USB and retrieve the log file from `.adds/NickelStorygraph/` to share when reporting the issue.
 
 ## Building
 
@@ -109,5 +139,6 @@ This separation means the CLI can be run and tested independently of the device 
 
 ## Acknowledgements
 
-- Built on top of [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover) by Ava Johnson, a Kobo plugin for [Hardcover](https://hardcover.app) with a nearly identical architecture. Large portions of the hook and CLI infrastructure are derived from that project.
+- Forked from [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover) by Ava Johnson, a Kobo plugin for [Hardcover](https://hardcover.app). Large portions of the hook and CLI infrastructure are derived from that project.
 - Uses [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin for Kobo plugin injection.
+- Built using [NickelTC](https://github.com/nickel-org/nickeltc) by Patrick Gaskin, the ARM cross-compilation toolchain for Kobo development.

@@ -10,6 +10,7 @@
 
 #include "../cli.h"
 #include "../menucontroller.h"
+#include "../settings.h"
 #include "../synccontroller.h"
 #include "../widgets/label.h"
 #include "../widgets/rating.h"
@@ -41,6 +42,31 @@ ReviewDialog::ReviewDialog() : Dialog("Write your review") {
   scroll->verticalScrollBar()->setSingleStep(200);
   outer->addWidget(scroll, 1);
 
+  // ── Floating scroll buttons ──────────────────────────────────────────────────
+  static const char *btnStyle =
+    "background-color: #262626; color: white; font-size: 20pt;";
+
+  scrollUpBtn = construct_TouchLabel(this);
+  scrollUpBtn->setText("▲");
+  scrollUpBtn->setAlignment(Qt::AlignCenter);
+  scrollUpBtn->setFixedSize(60, 60);
+  scrollUpBtn->setStyleSheet(btnStyle);
+  scrollUpBtn->hide();
+  QObject::connect(scrollUpBtn, SIGNAL(tapped(bool)), this, SLOT(scrollPageUp()));
+
+  scrollDownBtn = construct_TouchLabel(this);
+  scrollDownBtn->setText("▼");
+  scrollDownBtn->setAlignment(Qt::AlignCenter);
+  scrollDownBtn->setFixedSize(60, 60);
+  scrollDownBtn->setStyleSheet(btnStyle);
+  scrollDownBtn->hide();
+  QObject::connect(scrollDownBtn, SIGNAL(tapped(bool)), this, SLOT(scrollPageDown()));
+
+  QScrollBar *sb = scroll->verticalScrollBar();
+  QObject::connect(sb, &QScrollBar::valueChanged, this, &ReviewDialog::updateScrollButtons);
+  QObject::connect(sb, &QScrollBar::rangeChanged, this, [this](int, int) { updateScrollButtons(); });
+
+  // ── Content ──────────────────────────────────────────────────────────────────
   QWidget *contentWidget = new QWidget();
   contentLayout = new QVBoxLayout(contentWidget);
   contentLayout->setSpacing(16);
@@ -55,6 +81,44 @@ ReviewDialog::ReviewDialog() : Dialog("Write your review") {
   CLI *cli = CLI::getUserBook();
   QObject::connect(cli, &CLI::response, this, &ReviewDialog::response);
   QObject::connect(cli, &CLI::failure, dialog, &QDialog::deleteLater);
+}
+
+void ReviewDialog::resizeEvent(QResizeEvent *event) {
+  QFrame::resizeEvent(event);
+  repositionScrollButtons();
+}
+
+void ReviewDialog::repositionScrollButtons() {
+  if (!scrollUpBtn || !scrollDownBtn) return;
+  // Buttons are children of `this`; position them at the right edge of the
+  // scroll area (which has a 12px right margin in the outer layout).
+  int bw = scrollUpBtn->width(), bh = scrollUpBtn->height();
+  int margin = 12;
+  int x = width() - bw - margin;
+  scrollUpBtn->move(x, margin);
+  scrollDownBtn->move(x, height() - bh - margin);
+}
+
+void ReviewDialog::updateScrollButtons() {
+  if (!scrollUpBtn || !scrollDownBtn) return;
+  if (Settings::getInstance()->getSimpleReview()) return;
+  QScrollBar *sb = scroll->verticalScrollBar();
+
+  if (sb->value() > sb->minimum()) { scrollUpBtn->show(); scrollUpBtn->raise(); }
+  else scrollUpBtn->hide();
+
+  if (sb->value() < sb->maximum()) { scrollDownBtn->show(); scrollDownBtn->raise(); }
+  else scrollDownBtn->hide();
+}
+
+void ReviewDialog::scrollPageUp() {
+  QScrollBar *sb = scroll->verticalScrollBar();
+  sb->setValue(sb->value() - scroll->height() * 4 / 5);
+}
+
+void ReviewDialog::scrollPageDown() {
+  QScrollBar *sb = scroll->verticalScrollBar();
+  sb->setValue(sb->value() + scroll->height() * 4 / 5);
 }
 
 void ReviewDialog::response(QJsonObject doc) {
@@ -79,7 +143,6 @@ void ReviewDialog::response(QJsonObject doc) {
   // ── Rating ──────────────────────────────────────────────────────────────────
   rating = (float)doc.value("rating").toDouble(0);
 
-  // Single centered row: [−¼] [★★★★★] [+¼] [value]
   QWidget *ratingWidget2 = new QWidget(cw);
   QHBoxLayout *ratingRow = new QHBoxLayout(ratingWidget2);
   ratingRow->setSpacing(8);
@@ -131,6 +194,17 @@ void ReviewDialog::response(QJsonObject doc) {
   QObject::connect(touchText, SIGNAL(tapped()), this, SLOT(showKeyboard()));
   QObject::connect(clearBtn, SIGNAL(tapped(bool)), textEdit, SLOT(clear()));
 
+  if (Settings::getInstance()->getSimpleReview()) {
+    N3ButtonLabel *submitBtn = construct_N3ButtonLabel(cw);
+    submitBtn->setText("Submit review");
+    submitBtn->setProperty("primaryButton", true);
+    contentLayout->addWidget(submitBtn);
+    QObject::connect(submitBtn, SIGNAL(tapped(bool)), this, SLOT(commit()));
+    contentLayout->addStretch(1);
+    buildKeyboardFrameHideOnly(textEdit, "Done");
+    return;
+  }
+
   // ── Moods ── 4 columns to fit smaller screens ────────────────────────────────
   { QWidget *sep = new QWidget(cw); sep->setFixedHeight(16); contentLayout->addWidget(sep); }
   contentLayout->addWidget(new Label(Label::Medium, "MOODS"));
@@ -171,7 +245,6 @@ void ReviewDialog::response(QJsonObject doc) {
   { QWidget *sep = new QWidget(cw); sep->setFixedHeight(16); contentLayout->addWidget(sep); }
   contentLayout->addWidget(new Label(Label::Medium, "BOOK PROPERTIES"));
 
-  // Store field pointer on the container so questionTapped() can find it.
   auto addQuestionRow = [&](const char *labelText, QList<Item> options, QString *field) {
     contentLayout->addWidget(new Label(Label::Small, labelText));
 

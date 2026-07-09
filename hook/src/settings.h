@@ -45,6 +45,9 @@ public:
   void setDebug(bool value);
   bool getDebug();
 
+  void setSimpleReview(bool value);
+  bool getSimpleReview();
+
   bool is24HourClock();
 
 public Q_SLOTS:

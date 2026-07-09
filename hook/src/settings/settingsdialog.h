@@ -21,6 +21,7 @@ public Q_SLOTS:
   void setCloseThreshold(QVariant value);
   void setPageThreshold(QVariant value);
 
+  void setSimpleReview(bool value);
   void setDebug(bool value);
   void saveLogs();
 

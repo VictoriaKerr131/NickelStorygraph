@@ -45,7 +45,7 @@ void (*TouchLabel__constructor)(TouchLabel *_this, QWidget *parent, QFlags<Qt::W
 void (*TouchLabel__setHitStateEnabled)(TouchLabel *_this, bool enabled);
 
 TouchLabel *construct_TouchLabel(QWidget *parent) {
-  TouchLabel *label = reinterpret_cast<TouchLabel *>(calloc(1, 128));
+  TouchLabel *label = reinterpret_cast<TouchLabel *>(calloc(1, 512));
   TouchLabel__constructor(label, parent, 0);
   return label;
 }
@@ -53,7 +53,7 @@ TouchLabel *construct_TouchLabel(QWidget *parent) {
 void (*N3ButtonLabel__constructor)(N3ButtonLabel *_this, QWidget *parent);
 
 N3ButtonLabel *construct_N3ButtonLabel(QWidget *parent) {
-  N3ButtonLabel *button = reinterpret_cast<N3ButtonLabel *>(calloc(1, 512));
+  N3ButtonLabel *button = reinterpret_cast<N3ButtonLabel *>(calloc(1, 2048));
   N3ButtonLabel__constructor(button, parent);
   return button;
 }
@@ -61,7 +61,7 @@ N3ButtonLabel *construct_N3ButtonLabel(QWidget *parent) {
 void (*TouchCheckBox__constructor)(TouchCheckBox *_this, QWidget *parent);
 
 TouchCheckBox *construct_TouchCheckBox(QWidget *parent) {
-  TouchCheckBox *checkbox = reinterpret_cast<TouchCheckBox *>(calloc(1, 128));
+  TouchCheckBox *checkbox = reinterpret_cast<TouchCheckBox *>(calloc(1, 512));
   TouchCheckBox__constructor(checkbox, parent);
   return checkbox;
 }
@@ -70,7 +70,7 @@ void (*NickelTouchMenu__constructor)(NickelTouchMenu *_this, QWidget *parent, in
 void (*NickelTouchMenu__showDecoration)(NickelTouchMenu *_this, bool show);
 
 NickelTouchMenu *construct_NickelTouchMenu(QWidget *parent) {
-  NickelTouchMenu *menu = reinterpret_cast<NickelTouchMenu *>(calloc(1, 512));
+  NickelTouchMenu *menu = reinterpret_cast<NickelTouchMenu *>(calloc(1, 2048));
   NickelTouchMenu__constructor(menu, parent, 0);
   return menu;
 }
@@ -81,7 +81,7 @@ void (*MenuTextItem__setSelected)(MenuTextItem *_this, bool selected);
 void (*MenuTextItem__registerForTapGestures)(MenuTextItem *_this);
 
 MenuTextItem *construct_MenuTextItem(QWidget *parent, bool checkable, bool italic) {
-  MenuTextItem *item = reinterpret_cast<MenuTextItem *>(calloc(1, 256));
+  MenuTextItem *item = reinterpret_cast<MenuTextItem *>(calloc(1, 1024));
   MenuTextItem__constructor(item, parent, checkable, italic);
   return item;
 }
@@ -104,13 +104,13 @@ void (*KeyboardReceiver__constructor)(KeyboardReceiver *__this, QLineEdit *lineE
 void (*KeyboardReceiver__TextEdit_constructor)(KeyboardReceiver *__this, QTextEdit *parent, bool unknown);
 
 KeyboardReceiver *construct_KeyboardReceiver(QLineEdit *lineEdit) {
-  KeyboardReceiver *receiver = reinterpret_cast<KeyboardReceiver *>(calloc(1, 128));
+  KeyboardReceiver *receiver = reinterpret_cast<KeyboardReceiver *>(calloc(1, 512));
   KeyboardReceiver__constructor(receiver, lineEdit, false);
   return receiver;
 }
 
 KeyboardReceiver *construct_KeyboardReceiver(QTextEdit *textEdit) {
-  KeyboardReceiver *receiver = reinterpret_cast<KeyboardReceiver *>(calloc(1, 128));
+  KeyboardReceiver *receiver = reinterpret_cast<KeyboardReceiver *>(calloc(1, 512));
   KeyboardReceiver__TextEdit_constructor(receiver, textEdit, false);
   return receiver;
 }
@@ -122,7 +122,7 @@ void (*SearchKeyboardController__setGoText)(SearchKeyboardController *__this, QS
 void (*TouchLineEdit__constructor)(TouchLineEdit *__this, QWidget *parent);
 
 TouchLineEdit *construct_TouchLineEdit(QWidget *parent) {
-  TouchLineEdit *lineEdit = reinterpret_cast<TouchLineEdit *>(calloc(1, 128));
+  TouchLineEdit *lineEdit = reinterpret_cast<TouchLineEdit *>(calloc(1, 512));
   TouchLineEdit__constructor(lineEdit, parent);
   return lineEdit;
 }
@@ -130,7 +130,7 @@ TouchLineEdit *construct_TouchLineEdit(QWidget *parent) {
 void (*SettingContainer__constructor)(SettingContainer *__this, QWidget *parent);
 
 SettingContainer *construct_SettingContainer(QWidget *parent) {
-  SettingContainer *container = reinterpret_cast<SettingContainer *>(calloc(1, 128));
+  SettingContainer *container = reinterpret_cast<SettingContainer *>(calloc(1, 512));
   SettingContainer__constructor(container, parent);
   return container;
 }
@@ -139,7 +139,7 @@ void (*TouchTextEdit__constructor)(TouchTextEdit *__this, QWidget *parent);
 void (*TouchTextEdit__setCustomPlaceholderText)(TouchTextEdit *__this, QString const &text);
 
 TouchTextEdit *construct_TouchTextEdit(QWidget *parent) {
-  TouchTextEdit *touchText = reinterpret_cast<TouchTextEdit *>(calloc(1, 128));
+  TouchTextEdit *touchText = reinterpret_cast<TouchTextEdit *>(calloc(1, 512));
   TouchTextEdit__constructor(touchText, parent);
   return touchText;
 }
@@ -149,7 +149,7 @@ void (*PowerTimer__fireAt)(PowerTimer *__this, QDateTime const &datatime);
 int (*PowerTimer__timeRemaining)(PowerTimer *__this);
 
 PowerTimer *construct_PowerTimer(QString const &name, QObject *parent) {
-  PowerTimer *timer = reinterpret_cast<PowerTimer *>(calloc(1, 128));
+  PowerTimer *timer = reinterpret_cast<PowerTimer *>(calloc(1, 512));
   PowerTimer__constructor(timer, name, parent);
   return timer;
 }
@@ -157,7 +157,8 @@ PowerTimer *construct_PowerTimer(QString const &name, QObject *parent) {
 static struct nh_info NickelStorygraph = (struct nh_info){.name = "NickelStorygraph",
                                                          .desc = "Updates reading progress on StoryGraph",
                                                          .uninstall_flag = "/mnt/onboard/NickelStorygraph_uninstall",
-                                                         .uninstall_xflag = "/mnt/onboard/.adds/NickelStorygraph"};
+                                                         .uninstall_xflag = "/mnt/onboard/.adds/NickelStorygraph",
+                                                         .failsafe_delay = 30};
 
 // clang-format off
 static struct nh_hook NickelStorygraphHook[] = {
@@ -264,13 +265,14 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
   QWidget *cv = MainWindowController__currentView(mwc);
 
   if (!stackedWidget) {
-    if (QString(cv->parentWidget()->metaObject()->className()) == "QStackedWidget") {
-      stackedWidget = static_cast<QStackedWidget *>(cv->parentWidget());
+    QWidget *parent = cv ? cv->parentWidget() : nullptr;
+    if (parent && QString(parent->metaObject()->className()) == "QStackedWidget") {
+      stackedWidget = static_cast<QStackedWidget *>(parent);
       QObject::connect(stackedWidget, &QStackedWidget::currentChanged, SyncController::getInstance(),
                        &SyncController::currentViewIndexChanged);
       QObject::connect(stackedWidget, &QObject::destroyed, handleStackedWidgetDestroyed);
     } else {
-      nh_log("Error: expected QStackedWidget, got %s", cv->parentWidget()->metaObject()->className());
+      nh_log("Error: expected QStackedWidget, got %s", parent ? parent->metaObject()->className() : "null");
     }
   }
 

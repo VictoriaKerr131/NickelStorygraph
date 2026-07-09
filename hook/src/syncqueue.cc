@@ -102,10 +102,7 @@ void SyncQueue::run(QString contentId, bool manual) {
     }
     int statusId = doc.value("status_id").toInt(0);
     if (statusId > 0) {
-      int prevStatus = Settings::getInstance()->getStatus(contentId);
       Settings::getInstance()->setStatus(contentId, statusId);
-      if (statusId == 3 && prevStatus != 3)
-        pendingReviewPrompt = true;
     }
     if (lastProgress == 100)
       pendingReviewPrompt = true;
@@ -116,8 +113,12 @@ void SyncQueue::run(QString contentId, bool manual) {
 }
 
 void SyncQueue::success() {
-  if (dialog != nullptr) {
-    // Manual sync: also pull in any new annotations silently.
+  QString syncMode = Settings::getInstance()->getSyncBookmarks();
+  bool syncBookmarks = (syncMode == "always") ||
+                       (syncMode == "manual" && dialog != nullptr) ||
+                       (syncMode == "finished" && lastProgress == 100);
+
+  if (syncBookmarks) {
     CLI::Options options;
     options.silent = true;
     options.contentId = contentId;

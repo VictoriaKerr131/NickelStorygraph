@@ -1,6 +1,7 @@
 ﻿#include <QJsonObject>
 #include <QLabel>
 #include <QObject>
+#include <QPointer>
 #include <QStringList>
 
 class CLI : public QObject {
@@ -54,7 +55,7 @@ private:
 
   void showIcon(const char *path);
 
-  QLabel *icon = nullptr;
+  QPointer<QLabel> icon;
   QTimer *timer = nullptr;
   QStringList arguments;
   Options options;
