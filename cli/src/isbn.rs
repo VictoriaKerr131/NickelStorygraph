@@ -313,10 +313,6 @@ fn read_epub_isbn(content_id: &str) -> Result<Vec<String>> {
     }
   }
 
-  if isbn.is_empty() {
-    book_not_found("Couldn't find an ISBN in the EPUB metadata or content. Please link book manually.")
-  }
-
   isbn.sort();
   isbn.dedup();
 
