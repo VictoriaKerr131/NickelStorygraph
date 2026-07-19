@@ -31,7 +31,7 @@ pub fn run(args: ListBookmarks) -> Result<()> {
       LEFT JOIN content
         ON content.ContentId = VolumeID AND BookTitle is null
       WHERE Hidden = 'false'
-      AND bookmark.Text != ''
+      AND (bookmark.Text != '' OR bookmark.Annotation != '')
       GROUP BY VolumeID
       ORDER BY Bookmark.DateModified DESC;",
     )

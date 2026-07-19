@@ -156,4 +156,14 @@ void Settings::setSimpleReview(bool value) {
 
 bool Settings::getSimpleReview() { return config->value("simple_review", false).toBool(); }
 
+bool Settings::getHomeMenuEnabled() { return config->value("home_menu", true).toBool(); }
+bool Settings::getHomeMenuReading() { return config->value("home_menu_reading", true).toBool(); }
+bool Settings::getHomeMenuFeed()    { return config->value("home_menu_feed", true).toBool(); }
+bool Settings::getHomeMenuGoals()   { return config->value("home_menu_goals", true).toBool(); }
+
+void Settings::setHomeMenuEnabled(bool value) { config->setValue("home_menu", value); }
+void Settings::setHomeMenuReading(bool value) { config->setValue("home_menu_reading", value); }
+void Settings::setHomeMenuFeed(bool value)    { config->setValue("home_menu_feed", value); }
+void Settings::setHomeMenuGoals(bool value)   { config->setValue("home_menu_goals", value); }
+
 bool Settings::is24HourClock() { return kobo->value("ApplicationPreferences/is24HourClock").toBool(); }

@@ -1,4 +1,6 @@
-﻿#include <QLabel>
+﻿#pragma once
+
+#include <QLabel>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QSettings>

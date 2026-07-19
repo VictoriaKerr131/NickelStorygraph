@@ -10,6 +10,12 @@
 #include "settings.h"
 #include "synccontroller.h"
 
+CLI *CLI::getFeed(Options options)  { return new CLI({"get-feed"},  options); }
+
+CLI *CLI::getGoals(Options options) { return new CLI({"get-goals"}, options); }
+
+CLI *CLI::getStreak(Options options) { return new CLI({"get-streak"}, options); }
+
 CLI *CLI::listBookmarks(Options options) { return new CLI({"list-bookmarks"}, options); }
 
 CLI *CLI::listEditions(QString bookId, int readingFormat, QString language, Options options) {
@@ -25,6 +31,8 @@ CLI *CLI::listEditions(QString bookId, int readingFormat, QString language, Opti
 
   return new CLI(arguments, options);
 }
+
+CLI *CLI::listReading(Options options) { return new CLI({"list-reading"}, options); }
 
 CLI *CLI::listJournal(int limit, int offset, Options options) {
   QStringList arguments = {"list-journal", "--limit", QString::number(limit), "--offset", QString::number(offset)};
@@ -187,8 +195,9 @@ void CLI::showIcon(const char *path) {
     QWidget *window = cv->window();
     if (!window) return;
     icon = new QLabel(window);
-    icon->resize(90, 90);
-    icon->move(window->width() - 144, window->height() - 144);
+    icon->resize(48, 48);
+    icon->setScaledContents(true); // Files::icon is a 90x90 native asset - scale it down to match the label
+    icon->move(window->width() - 84, window->height() - 84);
   }
 
   icon->setPixmap(QPixmap(path));

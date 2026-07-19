@@ -3,7 +3,8 @@ use std::panic;
 
 use crate::commands::listbookmarks;
 use crate::commands::listeditions;
-use crate::commands::{getuser, getuserbook, insertjournal, listjournal, search, setuserbook, switchedition, syncedition, update, updatejournal};
+use crate::commands::listreading;
+use crate::commands::{getfeed, getgoals, getstreak, getuser, getuserbook, insertjournal, listjournal, search, setuserbook, switchedition, syncedition, update, updatejournal};
 use crate::config::CONFIG;
 use crate::utils::{VERSION, write_logfile};
 
@@ -31,12 +32,16 @@ struct Arguments {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand)]
 enum Commands {
+  GetFeed(getfeed::GetFeed),
+  GetGoals(getgoals::GetGoals),
+  GetStreak(getstreak::GetStreak),
   GetUser(getuser::GetUser),
   GetUserBook(getuserbook::GetUserBook),
   InsertJournal(insertjournal::InsertJournal),
   ListBookmarks(listbookmarks::ListBookmarks),
   ListEditions(listeditions::ListEditions),
   ListJournal(listjournal::ListJournal),
+  ListReading(listreading::ListReading),
   Search(search::Search),
   SetUserBook(setuserbook::SetUserBook),
   SwitchEdition(switchedition::SwitchEdition),
@@ -66,12 +71,16 @@ fn main() {
     .command
     .expect("A subcommand must be present. Run with --help for more information.")
   {
+    Commands::GetFeed(args) => getfeed::run(args),
+    Commands::GetGoals(args) => getgoals::run(args),
+    Commands::GetStreak(args) => getstreak::run(args),
     Commands::GetUser(args) => getuser::run(args),
     Commands::GetUserBook(args) => getuserbook::run(args),
     Commands::InsertJournal(args) => insertjournal::run(args),
     Commands::ListBookmarks(args) => listbookmarks::run(args),
     Commands::ListEditions(args) => listeditions::run(args),
     Commands::ListJournal(args) => listjournal::run(args),
+    Commands::ListReading(args) => listreading::run(args),
     Commands::Search(args) => search::run(args),
     Commands::SetUserBook(args) => setuserbook::run(args),
     Commands::SwitchEdition(args) => switchedition::run(args),

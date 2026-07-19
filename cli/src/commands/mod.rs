@@ -1,9 +1,13 @@
+pub mod getfeed;
+pub mod getgoals;
+pub mod getstreak;
 pub mod getuser;
 pub mod getuserbook;
 pub mod insertjournal;
 pub mod listbookmarks;
 pub mod listeditions;
 pub mod listjournal;
+pub mod listreading;
 pub mod search;
 pub mod setuserbook;
 pub mod switchedition;

@@ -1,4 +1,6 @@
-﻿#include <QDateTime>
+﻿#pragma once
+
+#include <QDateTime>
 #include <QObject>
 #include <QSettings>
 #include <QVariant>
@@ -47,6 +49,16 @@ public:
 
   void setSimpleReview(bool value);
   bool getSimpleReview();
+
+  bool getHomeMenuEnabled();
+  bool getHomeMenuReading();
+  bool getHomeMenuFeed();
+  bool getHomeMenuGoals();
+
+  void setHomeMenuEnabled(bool value);
+  void setHomeMenuReading(bool value);
+  void setHomeMenuFeed(bool value);
+  void setHomeMenuGoals(bool value);
 
   bool is24HourClock();
 

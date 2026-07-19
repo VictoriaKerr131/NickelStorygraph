@@ -7,6 +7,11 @@ constexpr char const *koboSettings = "/mnt/onboard/.kobo/Kobo/Kobo eReader.conf"
 constexpr char const *cli = "/mnt/onboard/.adds/NickelStorygraph/cli";
 constexpr char const *adds_directory = "/mnt/onboard/.adds/NickelStorygraph";
 
+// Cleanup target for hardcover_uninstall(): earlier builds dropped a
+// "StoryGraph" entry into NickelMenu's own config directory; no longer
+// written, but still removed on uninstall in case it's present.
+constexpr char const *nickelmenu_config_entry = "/mnt/onboard/.adds/nm/storygraph";
+
 constexpr char const *arrow_backward = ":/images/reading/global_backward.png";
 constexpr char const *arrow_down = ":/images/widgets/settings_date_time_down.png";
 constexpr char const *arrow_forward = ":/images/reading/global_forward.png";
@@ -18,7 +23,14 @@ constexpr char const *clear = ":/nickelstoregraph/clear.png";
 constexpr char const *icon = ":/nickelstoregraph/icon.png";
 constexpr char const *icon_hit = ":/nickelstoregraph/icon_hit.png";
 constexpr char const *icon_hit_dark = ":/nickelstoregraph/icon_hit_dark.png";
-constexpr char const *icon_outline = ":/nickelstoregraph/icon_outline.png";
+constexpr char const *icon_outline = ":/nickelstoregraph/icon_outline.png"; // currently unused, kept for future use
+// High-res source for the home screen tab bar icon, scaled at runtime to
+// match Nickel's own native tab icon size - see scaledNavIconPath() in
+// nickelstoregraph.cc. nav_icon/nav_icon_hit below are the static fallback
+// used only if that runtime scaling fails.
+constexpr char const *icon_master_outline = ":/nickelstoregraph/icon-master-outline.png";
+constexpr char const *nav_icon = ":/nickelstoregraph/nav_icon.png";
+constexpr char const *nav_icon_hit = ":/nickelstoregraph/nav_icon_hit.png";
 constexpr char const *left_star = ":/nickelstoregraph/left_star.png";
 constexpr char const *left_star_hit = ":/nickelstoregraph/left_star_hit.png";
 constexpr char const *loading = ":/nickelstoregraph/loading.png";

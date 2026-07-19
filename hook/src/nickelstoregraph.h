@@ -1,4 +1,6 @@
-﻿#include <QCheckBox>
+﻿#pragma once
+
+#include <QCheckBox>
 #include <QDialog>
 #include <QFrame>
 #include <QJsonObject>
@@ -77,7 +79,11 @@ typedef QCheckBox TouchCheckBox;
 TouchCheckBox *construct_TouchCheckBox(QWidget *parent);
 
 typedef QMenu NickelTouchMenu;
-NickelTouchMenu *construct_NickelTouchMenu(QWidget *parent);
+// pos is the DecorationPosition Nickel constructs the menu with. 0 is used
+// for anchored popups (a pointer/"speech bubble" triangle toward the anchor
+// makes sense there); 3 is what Nickel/NickelMenu use for the home screen
+// tab bar's own popup, which renders as a plain rectangle.
+NickelTouchMenu *construct_NickelTouchMenu(QWidget *parent, int pos = 0);
 extern void (*NickelTouchMenu__showDecoration)(NickelTouchMenu *_this, bool show);
 
 typedef QWidget MenuTextItem;
@@ -94,3 +100,8 @@ typedef QObject PowerTimer;
 PowerTimer *construct_PowerTimer(QString const &name, QObject *parent);
 extern void (*PowerTimer__fireAt)(PowerTimer *__this, QDateTime const &datatime);
 extern int (*PowerTimer__timeRemaining)(PowerTimer *__this);
+
+// Shows/hides the home screen "StoryGraph" tab bar button immediately, so
+// toggling the setting in SettingsDialog doesn't require a Nickel restart.
+// No-op if the button hasn't been constructed yet (e.g. NickelMenu present).
+void setHomeButtonVisible(bool visible);

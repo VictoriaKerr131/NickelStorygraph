@@ -12,9 +12,9 @@
 #include "settingsdialog.h"
 #include "staticrow.h"
 
-void SettingsDialog::show() { new SettingsDialog(); }
+void SettingsDialog::show(bool fromHomeMenu) { new SettingsDialog(fromHomeMenu); }
 
-SettingsDialog::SettingsDialog() : Dialog("Settings") {
+SettingsDialog::SettingsDialog(bool fromHomeMenu) : Dialog("Settings", fromHomeMenu), fromHomeMenu(fromHomeMenu) {
   setStyleSheet(R"(
     [qApp_deviceIsTrilogy=true] Label[textSize="ExtraLarge"] {
       margin: 24px 36px 12px;
@@ -163,7 +163,10 @@ void SettingsDialog::buildPages() {
   rows->setSpacing(0);
   rows->setContentsMargins(0, 0, 0, 0);
 
-  QList<QFrame *> sections = {buildGeneral(), buildAutoSync(), buildInformation(), buildAdvanced()};
+  QList<QFrame *> sections = {buildGeneral(), buildAutoSync(), buildHomeMenu()};
+  if (!fromHomeMenu)
+    sections.append(buildInformation());
+  sections.append(buildAdvanced());
   int availableHeight = pages->getAvailableHeight();
   int pageHeight = 0;
 
@@ -288,6 +291,40 @@ QFrame *SettingsDialog::buildAutoSync() {
   return frame;
 }
 
+QFrame *SettingsDialog::buildHomeMenu() {
+  QFrame *frame = new QFrame(this);
+  QVBoxLayout *layout = new QVBoxLayout(frame);
+  layout->setSpacing(0);
+  layout->setContentsMargins(0, 0, 0, 0);
+
+  layout->addWidget(new Label(Label::Avenir, "Home menu"));
+
+  Settings *settings = Settings::getInstance();
+  bool homeMenuEnabled = settings->getHomeMenuEnabled();
+
+  CheckboxRow *row = new CheckboxRow("Show StoryGraph button on home screen", homeMenuEnabled);
+  QObject::connect(row, &CheckboxRow::triggered, this, &SettingsDialog::setHomeMenuEnabled);
+  layout->addWidget(row);
+  row->setProperty("noBorder", true);
+
+  homeMenuReadingRow = new CheckboxRow("Currently Reading", settings->getHomeMenuReading());
+  QObject::connect(homeMenuReadingRow, &CheckboxRow::triggered, this, &SettingsDialog::setHomeMenuReading);
+  homeMenuReadingRow->setRowEnabled(homeMenuEnabled);
+  layout->addWidget(homeMenuReadingRow);
+
+  homeMenuFeedRow = new CheckboxRow("Community Feed", settings->getHomeMenuFeed());
+  QObject::connect(homeMenuFeedRow, &CheckboxRow::triggered, this, &SettingsDialog::setHomeMenuFeed);
+  homeMenuFeedRow->setRowEnabled(homeMenuEnabled);
+  layout->addWidget(homeMenuFeedRow);
+
+  homeMenuGoalsRow = new CheckboxRow("Reading Goals", settings->getHomeMenuGoals());
+  QObject::connect(homeMenuGoalsRow, &CheckboxRow::triggered, this, &SettingsDialog::setHomeMenuGoals);
+  homeMenuGoalsRow->setRowEnabled(homeMenuEnabled);
+  layout->addWidget(homeMenuGoalsRow);
+
+  return frame;
+}
+
 QFrame *SettingsDialog::buildInformation() {
   QFrame *frame = new QFrame(this);
   QVBoxLayout *layout = new QVBoxLayout(frame);
@@ -340,7 +377,6 @@ void SettingsDialog::setAutoSyncDefault(bool value) { Settings::getInstance()->s
 
 void SettingsDialog::setSyncBookmarks(QVariant value) { Settings::getInstance()->setSyncBookmarks(value.toString()); }
 
-
 void SettingsDialog::setSyncDaily(QVariant value) { Settings::getInstance()->setSyncDaily(value.toInt()); }
 
 void SettingsDialog::setCloseThreshold(QVariant value) { Settings::getInstance()->setCloseThreshold(value.toInt()); }
@@ -362,3 +398,14 @@ void SettingsDialog::setSimpleReview(bool value) { Settings::getInstance()->setS
 void SettingsDialog::setDebug(bool value) { Settings::getInstance()->setDebug(value); }
 
 void SettingsDialog::saveLogs() { nh_dump_log(); }
+
+void SettingsDialog::setHomeMenuEnabled(bool value) {
+  Settings::getInstance()->setHomeMenuEnabled(value);
+  setHomeButtonVisible(value);
+  if (homeMenuReadingRow) homeMenuReadingRow->setRowEnabled(value);
+  if (homeMenuFeedRow) homeMenuFeedRow->setRowEnabled(value);
+  if (homeMenuGoalsRow) homeMenuGoalsRow->setRowEnabled(value);
+}
+void SettingsDialog::setHomeMenuReading(bool value) { Settings::getInstance()->setHomeMenuReading(value); }
+void SettingsDialog::setHomeMenuFeed(bool value)    { Settings::getInstance()->setHomeMenuFeed(value); }
+void SettingsDialog::setHomeMenuGoals(bool value)   { Settings::getInstance()->setHomeMenuGoals(value); }

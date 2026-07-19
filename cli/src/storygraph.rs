@@ -345,6 +345,448 @@ fn fetch_page_data(book_id: &str) -> Result<(String, PageData)> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/// A single reading goal (books, pages, or hours) from the challenges dashboard.
+#[derive(Serialize, Debug)]
+pub struct GoalEntry {
+  pub label: String,    // "Books", "Pages", "Hours"
+  pub current: String,  // raw string: "10", "2,458", "27.98"
+  pub target: String,   // raw string: "26", "10,000", "50"
+  pub unit: String,     // "books", "pages", "hours"
+  pub percent: u32,     // 0–100
+  pub status: String,   // status message text
+}
+
+/// Reading goals summary from the StoryGraph challenges dashboard.
+#[derive(Serialize, Debug)]
+pub struct ReadingGoals {
+  pub year: String,
+  pub books_read: u32,
+  pub goals: Vec<GoalEntry>,
+}
+
+/// Fetches the user's reading goals from `/reading_challenges/dashboard/{slug}`.
+pub fn get_goals() -> Result<ReadingGoals> {
+  assert_credentials();
+  let user = get_user()?;
+  let html = get(&format!("/reading_challenges/dashboard/{}", user.slug))?;
+  let doc = Html::parse_document(&html);
+
+  // Find a 4-digit "20xx" year in any heading; fall back to the current calendar year.
+  let heading_sel = Selector::parse("h1, h2, h3").expect("valid");
+  let year = doc
+    .select(&heading_sel)
+    .find_map(|el| {
+      el.text()
+        .collect::<String>()
+        .split_whitespace()
+        .find(|w| w.len() == 4 && w.starts_with("20") && w.chars().all(|c| c.is_ascii_digit()))
+        .map(str::to_owned)
+    })
+    .unwrap_or_else(|| {
+      use chrono::Datelike;
+      chrono::Local::now().year().to_string()
+    });
+
+  // "You have read 10 books this year." — count comes from the link text
+  let books_link_sel = Selector::parse(r#"a[href*="/books-read/"]"#).expect("valid");
+  let books_read: u32 = doc
+    .select(&books_link_sel)
+    .next()
+    .and_then(|el| {
+      el.text()
+        .collect::<String>()
+        .split_whitespace()
+        .next()
+        .and_then(|s| s.parse().ok())
+    })
+    .unwrap_or(0);
+
+  // h6 labels ("Books", "Pages", "Hours") — each appears twice (mobile + desktop); deduplicate
+  let h6_sel = Selector::parse("h6").expect("valid");
+  let mut labels: Vec<String> = Vec::new();
+  let mut seen_labels = std::collections::HashSet::new();
+  for el in doc.select(&h6_sel) {
+    let text = el
+      .text()
+      .find(|s| !s.trim().is_empty())
+      .map(|s| s.trim().to_owned())
+      .unwrap_or_default();
+    if !text.is_empty() && seen_labels.insert(text.clone()) {
+      labels.push(text);
+    }
+  }
+
+  // Mobile count paragraphs: "10/26 books", "2,458/10,000 pages", "27.98/50 hours"
+  let count_sel = Selector::parse("p.flex-shrink-0").expect("valid");
+  let counts: Vec<String> = doc
+    .select(&count_sel)
+    .map(|el| el.text().collect::<String>().trim().to_owned())
+    .collect();
+
+  // Progress fill div style="width:X%" — one per goal in DOM order
+  let fill_sel = Selector::parse(r#"div[style*="width:"]"#).expect("valid");
+  let percents: Vec<u32> = doc
+    .select(&fill_sel)
+    .filter_map(|el| {
+      let style = el.value().attr("style")?;
+      let i = style.find("width:")?;
+      let after = style[i + 6..].trim_start();
+      let end = after.find('%')?;
+      after[..end].trim().parse().ok()
+    })
+    .collect();
+
+  // Status messages from italic mobile divs (shorter single-line versions)
+  let status_sel = Selector::parse("div.italic p").expect("valid");
+  let statuses: Vec<String> = doc
+    .select(&status_sel)
+    .map(|el| el.text().collect::<String>().trim().to_owned())
+    .collect();
+
+  debug_log!(
+    "get_goals(): year={:?}, books_read={}, labels={:?}, counts={:?}, percents={:?}, statuses={:?}",
+    year,
+    books_read,
+    labels,
+    counts,
+    percents,
+    statuses
+  );
+
+  let n = labels.len().min(counts.len()).min(percents.len());
+  let mut goals = Vec::new();
+  for i in 0..n {
+    let label = labels[i].clone();
+    let percent = percents[i];
+    let status = statuses.get(i).cloned().unwrap_or_default();
+
+    // "10/26 books" → current="10", target="26", unit="books"
+    let (current, target, unit) = if let Some((left, right)) = counts[i].split_once('/') {
+      let current = left.trim().to_owned();
+      let mut parts = right.trim().splitn(2, ' ');
+      let target = parts.next().unwrap_or("").to_owned();
+      let unit = parts.next().unwrap_or("").to_owned();
+      (current, target, unit)
+    } else {
+      (String::new(), String::new(), String::new())
+    };
+
+    goals.push(GoalEntry { label, current, target, unit, percent, status });
+  }
+
+  Ok(ReadingGoals { year, books_read, goals })
+}
+
+/// The user's current StoryGraph reading streak.
+#[derive(Serialize, Debug, Default)]
+pub struct Streak {
+  pub requirement: String,  // e.g. "1 page, or 1 minute, every day"
+  pub current: String,      // e.g. "1"
+  pub longest: String,      // e.g. "46"
+  pub period: String,       // e.g. "Jul 18"
+  pub reading_left: String, // e.g. "Reading left: 1 page or 1 minute"
+}
+
+/// Fetches the user's reading streak from `/streak/{slug}`.
+pub fn get_streak() -> Result<Streak> {
+  assert_credentials();
+  let user = get_user()?;
+  let html = get(&format!("/streak/{}", user.slug))?;
+  let doc = Html::parse_document(&html);
+
+  // "font-medium" and bare "dl" are generic Tailwind utility classes/tags
+  // that could easily match unrelated elements elsewhere on a real
+  // (non-fragment) page, so scope searches as tightly as the known markup
+  // allows rather than matching anywhere in the document.
+
+  // The <p class="font-medium"> holding the requirement text is a direct
+  // sibling of the "Streak" <h1> under the same parent div.
+  let heading_sel = Selector::parse("h1.page-heading").expect("valid");
+  let requirement_container = doc
+    .select(&heading_sel)
+    .find(|el| el.text().collect::<String>().trim() == "Streak")
+    .and_then(|h1| h1.parent())
+    .and_then(scraper::ElementRef::wrap);
+
+  // The streak requirement ("1 page, or 1 minute, every day", "5 pages,
+  // every day", etc.) is shown verbatim rather than parsed, since the
+  // wording/units vary per user's streak settings.
+  let requirement_sel = Selector::parse("p.font-medium span").expect("valid");
+  let requirement = requirement_container
+    .and_then(|c| c.select(&requirement_sel).next())
+    .map(|el| el.text().collect::<String>().trim().to_owned())
+    .unwrap_or_default();
+
+  // Current/longest streak and the current-period note each live in a
+  // dt/dd pair under a shared parent div inside the streak stats <dl>
+  // (identified by its specific classes rather than just "dl") — walk
+  // dt's parent to find its matching dd rather than assuming array
+  // alignment across all pairs.
+  let dt_sel = Selector::parse("dl.font-semibold dt").expect("valid");
+  let dd_sel = Selector::parse("dl.font-semibold dd").expect("valid");
+  let italic_sel = Selector::parse("span.italic").expect("valid");
+
+  let mut streak = Streak { requirement, ..Default::default() };
+
+  for dt in doc.select(&dt_sel) {
+    let label = dt.text().collect::<String>().trim().to_owned();
+    let Some(parent) = dt.parent().and_then(scraper::ElementRef::wrap) else { continue };
+    let dd_text = parent
+      .select(&dd_sel)
+      .next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .unwrap_or_default();
+
+    if label == "Current streak" {
+      streak.current = dd_text;
+    } else if label == "Longest streak" {
+      streak.longest = dd_text;
+    } else if label.starts_with("Current period") {
+      streak.period = dt
+        .select(&italic_sel)
+        .next()
+        .map(|el| el.text().collect::<String>().trim().to_owned())
+        .unwrap_or_default();
+      streak.reading_left = dd_text;
+    }
+  }
+
+  debug_log!("get_streak(): {streak:?}");
+  Ok(streak)
+}
+
+/// A book on the user's currently-reading or paused shelf.
+#[derive(Serialize, Debug)]
+pub struct ReadingBook {
+  pub id: String,
+  pub title: String,
+  pub author: String,
+  pub progress_percent: u32,
+  pub pages: u32,
+  pub format: String,
+  pub year: u32,
+  pub status: String,            // "reading" or "paused"
+  pub cover_url: Option<String>, // absolute URL or None
+}
+
+/// A single item in the community activity feed.
+#[derive(Serialize, Debug)]
+pub struct FeedItem {
+  pub username: String,
+  pub action: String,               // "started reading", "finished reading and reviewed", etc.
+  pub time_ago: String,             // "1d", "2h", "5m"
+  pub book_title: String,
+  pub book_author: String,
+  pub cover_url: Option<String>,
+  pub genres: Vec<String>,
+  pub moods: Vec<String>,
+  pub rating: Option<f32>,          // present on "finished reading and reviewed" items
+  pub review_snippet: Option<String>, // truncated review text, if present
+}
+
+/// Fetches the community activity feed from `/community`.
+/// Items live inside `.news-feed-item-panes` as `[data-news-feed-item-id]` elements.
+pub fn get_feed() -> Result<Vec<FeedItem>> {
+  assert_credentials();
+  let html = get("/community")?;
+  let doc = Html::parse_document(&html);
+
+  let item_sel    = Selector::parse("[data-news-feed-item-id]").expect("valid");
+  let h3_sel      = Selector::parse("h3").expect("valid");
+  let profile_sel = Selector::parse(r#"a[href^="/profile/"]"#).expect("valid");
+  let cover_sel   = Selector::parse(".book-cover img").expect("valid");
+  let title_sel   = Selector::parse("h4 a").expect("valid");
+  let author_sel  = Selector::parse(r#"p a[href^="/authors/"]"#).expect("valid");
+  let time_sel    = Selector::parse(r#"span[class*="absolute"]"#).expect("valid");
+  let teal_sel    = Selector::parse(r#"span[class*="text-teal-800"]"#).expect("valid");
+  let pink_sel    = Selector::parse(r#"span[class*="text-pink-700"]"#).expect("valid");
+  let rating_sel  = Selector::parse(r#"a[aria-label*="Rating:"]"#).expect("valid");
+  let review_sel  = Selector::parse(r#"a[class*="clamp-3"]"#).expect("valid");
+
+  let mut items = Vec::new();
+
+  for item in doc.select(&item_sel) {
+    // Time: the absolute-positioned span in the top-right corner
+    let time_ago = item.select(&time_sel).next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .unwrap_or_default();
+
+    // Username + action from the first h3 (mobile header)
+    let (username, action) = if let Some(h3) = item.select(&h3_sel).next() {
+      let username = h3.select(&profile_sel).next()
+        .map(|el| el.text().collect::<String>().trim().to_owned())
+        .unwrap_or_default();
+
+      // Collect all text nodes; strip username prefix to get the action verb
+      let full: String = h3.text().map(|t| t.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>().join(" ");
+      let action = if username.is_empty() {
+        full.trim().to_owned()
+      } else {
+        full.trim()
+          .replacen(&username, "", 1)
+          .trim()
+          .trim_end_matches(':')
+          .trim()
+          .to_owned()
+      };
+      (username, action)
+    } else {
+      (String::new(), String::new())
+    };
+
+    if username.is_empty() { continue; }
+
+    // Book cover
+    let cover_url = item.select(&cover_sel).next()
+      .and_then(|el| el.value().attr("src").or_else(|| el.value().attr("data-src")))
+      .map(|src| {
+        if src.starts_with("http") { src.to_owned() }
+        else { format!("{BASE_URL}{src}") }
+      });
+
+    let book_title = item.select(&title_sel).next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .unwrap_or_default();
+
+    let book_author = item.select(&author_sel).next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .unwrap_or_default();
+
+    // Genres (teal) and moods (pink) — deduplicated (each tag appears twice in mobile+desktop)
+    let mut seen_g = std::collections::HashSet::new();
+    let genres: Vec<String> = item.select(&teal_sel)
+      .filter_map(|el| {
+        let t = el.text().collect::<String>().trim().to_owned();
+        if t.is_empty() || !seen_g.insert(t.clone()) { None } else { Some(t) }
+      })
+      .collect();
+
+    let mut seen_m = std::collections::HashSet::new();
+    let moods: Vec<String> = item.select(&pink_sel)
+      .filter_map(|el| {
+        let t = el.text().collect::<String>().trim().to_owned();
+        if t.is_empty() || !seen_m.insert(t.clone()) { None } else { Some(t) }
+      })
+      .collect();
+
+    // Rating: from aria-label="Rating: 2.0 out of 5"
+    let rating = item.select(&rating_sel).next()
+      .and_then(|el| el.value().attr("aria-label"))
+      .and_then(|label| {
+        label.strip_prefix("Rating: ")
+          .and_then(|s| s.split(" out of").next())
+          .and_then(|s| s.trim().parse::<f32>().ok())
+      });
+
+    // Review snippet from line-clamped link
+    let review_snippet = item.select(&review_sel).next()
+      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .filter(|s| !s.is_empty());
+
+    items.push(FeedItem { username, action, time_ago, book_title, book_author, cover_url, genres, moods, rating, review_snippet });
+  }
+
+  debug_log!("get_feed(): {} items", items.len());
+  Ok(items)
+}
+
+fn scrape_shelf_section(doc: &Html, container_selector: &str, status: &str) -> Vec<ReadingBook> {
+  let container_sel = Selector::parse(container_selector).expect("valid");
+  let pane_sel      = Selector::parse(".book-pane").expect("valid");
+  let title_sel     = Selector::parse("h3.font-bold a").expect("valid");
+  let author_sel    = Selector::parse(r#"a[href^="/authors/"]"#).expect("valid");
+  let progress_sel  = Selector::parse("input.read-status-last-reached-percent").expect("valid");
+  let edition_sel   = Selector::parse(".toggle-edition-info-link").expect("valid");
+  let cover_sel     = Selector::parse(".book-cover img").expect("valid");
+
+  let mut books = Vec::new();
+
+  for container in doc.select(&container_sel) {
+    for pane in container.select(&pane_sel) {
+      let book_id = match pane.value().attr("data-book-id") {
+        Some(id) if !id.is_empty() => id.to_owned(),
+        _ => continue,
+      };
+
+      let title = pane
+        .select(&title_sel)
+        .next()
+        .map(|el| el.text().collect::<String>().trim().to_owned())
+        .unwrap_or_default();
+
+      if title.is_empty() {
+        continue;
+      }
+
+      let author = pane
+        .select(&author_sel)
+        .next()
+        .map(|el| el.text().collect::<String>().trim().to_owned())
+        .unwrap_or_default();
+
+      let progress: u32 = pane
+        .select(&progress_sel)
+        .next()
+        .and_then(|el| el.value().attr("value"))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+      let edition_text = pane
+        .select(&edition_sel)
+        .next()
+        .map(|el| el.text().collect::<String>())
+        .unwrap_or_default();
+
+      let parts: Vec<&str> = edition_text.split(" \u{2022} ").collect();
+      let pages: u32 = parts
+        .first()
+        .and_then(|s| s.trim().strip_suffix(" pages"))
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(0);
+      let format = parts.get(1).map(|s| s.trim().to_owned()).unwrap_or_default();
+      let year: u32 = parts.get(2).and_then(|s| s.trim().parse().ok()).unwrap_or(0);
+
+      let cover_url = pane.select(&cover_sel).next()
+        .and_then(|el| el.value().attr("src").or_else(|| el.value().attr("data-src")))
+        .map(|src| {
+          if src.starts_with("http") { src.to_owned() }
+          else { format!("{BASE_URL}{src}") }
+        });
+
+      books.push(ReadingBook {
+        id: book_id,
+        title,
+        author,
+        progress_percent: progress,
+        pages,
+        format,
+        year,
+        status: status.to_owned(),
+        cover_url,
+      });
+    }
+  }
+
+  books
+}
+
+/// Returns books on the currently-reading shelf followed by books on the paused shelf.
+/// Both sections live on the same `/currently-reading/{slug}` page:
+///   .read-books         → currently reading
+///   .paused-books-panes → paused
+pub fn list_reading() -> Result<Vec<ReadingBook>> {
+  assert_credentials();
+  let user = get_user()?;
+  let html = get(&format!("/currently-reading/{}", user.slug))?;
+  let doc = Html::parse_document(&html);
+
+  let mut books = scrape_shelf_section(&doc, ".read-books", "reading");
+  books.extend(scrape_shelf_section(&doc, ".paused-books-panes", "paused"));
+
+  debug_log!("list_reading(): {} books total", books.len());
+  Ok(books)
+}
+
 /// Returns the logged-in user's slug. Uses `user_slug` from config if set,
 /// otherwise scrapes the homepage nav for a `/users/` profile link.
 pub fn get_user() -> Result<User> {

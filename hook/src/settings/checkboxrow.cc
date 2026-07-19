@@ -16,11 +16,11 @@ CheckboxRow::CheckboxRow(QString heading, bool checked, QWidget *parent) : QWidg
 
   QHBoxLayout *rowLayout = new QHBoxLayout(row);
   rowLayout->setContentsMargins(0, 0, 0, 0);
-  Label *headingLabel = new Label(Label::Medium, heading);
+  headingLabel = new Label(Label::Medium, heading);
   rowLayout->addWidget(headingLabel, 1);
 
   checkbox = construct_TouchCheckBox(this);
-  checkbox->setText("On");
+  checkbox->setText(checked ? "On" : "Off");
   checkbox->setChecked(checked);
   checkbox->setAttribute(Qt::WA_TransparentForMouseEvents);
   rowLayout->addWidget(checkbox);
@@ -28,9 +28,19 @@ CheckboxRow::CheckboxRow(QString heading, bool checked, QWidget *parent) : QWidg
 }
 
 void CheckboxRow::tapped() {
+  if (!rowEnabled) return;
+
   nh_log("CheckboxRow::tapped()");
 
   checked = !checked;
   checkbox->setChecked(checked);
+  checkbox->setText(checked ? "On" : "Off");
   triggered(checked);
+}
+
+void CheckboxRow::setRowEnabled(bool enabled) {
+  rowEnabled = enabled;
+  setEnabled(enabled);
+  headingLabel->setEnabled(enabled);
+  checkbox->setEnabled(enabled);
 }

@@ -91,17 +91,20 @@ void MenuController::showMainMenu() {
 
   QString contentId = SyncController::getInstance()->contentId;
   Settings *settings = Settings::getInstance();
+  bool hasLinkedId = !settings->getLinkedId(contentId).isEmpty();
 
-  NickelTouchMenu *menu = showMenu(
-      {
-          {"Sync now", MenuOption::SYNC_NOW},
-          {settings->isEnabled(contentId) ? "Disable auto-sync" : "Enable auto-sync", MenuOption::TOGGLE_ENABLED},
-          {"Book management", MenuOption::BOOK_MANAGEMENT},
-          {"Open reading journal", MenuOption::JOURNAL},
-          {"Write a review", MenuOption::REVIEW},
-          {"Settings", MenuOption::SETTINGS},
-      },
-      icon, 6);
+  QList<Item> items = {
+      {"Sync now", MenuOption::SYNC_NOW},
+      {settings->isEnabled(contentId) ? "Disable auto-sync" : "Enable auto-sync", MenuOption::TOGGLE_ENABLED},
+      {"Book management", MenuOption::BOOK_MANAGEMENT},
+  };
+  if (hasLinkedId) {
+    items.append({"Open reading journal", MenuOption::JOURNAL});
+    items.append({"Write a review", MenuOption::REVIEW});
+  }
+  items.append({"Settings", MenuOption::SETTINGS});
+
+  NickelTouchMenu *menu = showMenu(items, icon, 6);
   QWidget::connect(menu, &QMenu::aboutToHide, icon, [this] { setSelected(false); });
   QWidget::connect(menu, &QMenu::triggered, this, &MenuController::triggered);
 
@@ -157,8 +160,8 @@ void MenuController::showBookManagementMenu() {
   };
   if (hasLinkedId) {
     items.append({"Sync edition from web", MenuOption::SYNC_EDITION});
+    items.append({"Update book status", MenuOption::BOOK_STATUS});
   }
-  items.append({"Update book status", MenuOption::BOOK_STATUS});
 
   NickelTouchMenu *menu = showMenu(items, icon, 6);
   QWidget::connect(menu, &QMenu::aboutToHide, icon, [this] { setSelected(false); });

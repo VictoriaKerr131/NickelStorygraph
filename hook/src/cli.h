@@ -1,4 +1,6 @@
-﻿#include <QJsonObject>
+﻿#pragma once
+
+#include <QJsonObject>
 #include <QLabel>
 #include <QObject>
 #include <QPointer>
@@ -18,9 +20,13 @@ public:
     Options() {};
   };
 
+  static CLI *getFeed(Options options = Options());
+  static CLI *getGoals(Options options = Options());
+  static CLI *getStreak(Options options = Options());
   static CLI *listBookmarks(Options options = Options());
   static CLI *listEditions(QString bookId, int readingFormat, QString language, Options options = Options());
   static CLI *listJournal(int limit, int offset, Options options = Options());
+  static CLI *listReading(Options options = Options());
   static CLI *insertJournal(QString text, int percentage, QString privacy, Options options = Options());
   static CLI *updateJournal(Options options = Options());
   static CLI *getUser(Options options = Options());

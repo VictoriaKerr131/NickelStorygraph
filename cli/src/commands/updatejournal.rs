@@ -1,6 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -28,6 +27,8 @@ pub struct UpdateJournal {
 
 pub fn run(args: UpdateJournal) -> Result<()> {
   log!("{} {:?}", &*VERSION, args);
+
+  cleanup_old_sync_files();
 
   let content_id = args.content_id.clone().unwrap_or_default();
   let (book_id, isbns) = normalize_identifiers(args.linked_id, args.content_id.as_deref());
@@ -58,20 +59,19 @@ pub fn run(args: UpdateJournal) -> Result<()> {
   let progress_percent = user_book.progress_percent;
   debug_log!("update-journal: posting {count} annotations at {progress_percent}%");
 
-  // Batch all highlights into one journal entry so the user can review/delete
-  // accidental highlights in Kobo before the next sync runs.
-  let note: String = annotations
-    .iter()
-    .map(|(text, annotation)| {
-      if annotation.is_empty() {
-        format!("<blockquote>{text}</blockquote>")
-      } else {
-        format!("<blockquote>{text}</blockquote><div><br>{annotation}</div>")
-      }
-    })
-    .collect();
-
-  storygraph::insert_journal(&book_id, &note, progress_percent, "percentage")?;
+  // One journal entry per highlight, so they read as individual entries on
+  // StoryGraph instead of bunching into a single wall of text. If any entry
+  // fails partway through, we bail without saving the sync timestamp so the
+  // whole batch (including ones that already succeeded) is retried next
+  // time rather than silently dropping the ones that failed.
+  for (text, annotation) in &annotations {
+    let note = if annotation.is_empty() {
+      format!("<blockquote>{text}</blockquote>")
+    } else {
+      format!("<blockquote>{text}</blockquote><div><br>{annotation}</div>")
+    };
+    storygraph::insert_journal(&book_id, &note, progress_percent, "percentage")?;
+  }
 
   let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
   if let Err(e) = save_sync_timestamp(&content_id, &now) {
@@ -82,26 +82,54 @@ pub fn run(args: UpdateJournal) -> Result<()> {
   Ok(())
 }
 
-fn sync_timestamp_path(content_id: &str) -> Result<PathBuf> {
-  let mut hasher = DefaultHasher::new();
-  content_id.hash(&mut hasher);
-  let hash = hasher.finish();
+// One-time cleanup of the old per-book "annotations_<hash>.txt" files this
+// used to scatter across the app directory. Their content can't be
+// meaningfully migrated (the hash doesn't reveal which book it was for), so
+// the first sync per book after upgrading re-checks full history — a
+// one-time re-sync is preferable to leaving the clutter behind forever.
+fn cleanup_old_sync_files() {
+  let Ok(exe) = std::env::current_exe() else { return };
+  let Some(dir) = exe.parent() else { return };
+  let Ok(entries) = fs::read_dir(dir) else { return };
+
+  for entry in entries.flatten() {
+    let name = entry.file_name();
+    let Some(name) = name.to_str() else { continue };
+    if name.starts_with("annotations_") && name.ends_with(".txt") {
+      let _ = fs::remove_file(entry.path());
+    }
+  }
+}
+
+// A single state file mapping content ID -> last annotation sync timestamp,
+// instead of one file per book (which used to litter the app directory with
+// opaquely-named "annotations_<hash>.txt" files, one per book ever synced).
+fn sync_state_path() -> Result<PathBuf> {
   let exe = std::env::current_exe().context("Failed to get binary path")?;
   let dir = exe.parent().context("Failed to get binary directory")?;
-  Ok(dir.join(format!("annotations_{hash:x}.txt")))
+  Ok(dir.join("annotation_sync_state.json"))
+}
+
+fn read_sync_state() -> HashMap<String, String> {
+  sync_state_path()
+    .ok()
+    .and_then(|p| fs::read_to_string(p).ok())
+    .and_then(|s| serde_json::from_str(&s).ok())
+    .unwrap_or_default()
 }
 
 fn last_sync_timestamp(content_id: &str) -> String {
-  sync_timestamp_path(content_id)
-    .ok()
-    .and_then(|p| fs::read_to_string(p).ok())
-    .map(|s| s.trim().to_owned())
+  read_sync_state()
+    .get(content_id)
     .filter(|s| !s.is_empty())
+    .cloned()
     .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned())
 }
 
 fn save_sync_timestamp(content_id: &str, timestamp: &str) -> Result<()> {
-  fs::write(sync_timestamp_path(content_id)?, timestamp)
+  let mut state = read_sync_state();
+  state.insert(content_id.to_owned(), timestamp.to_owned());
+  fs::write(sync_state_path()?, serde_json::to_string(&state)?)
     .context("Failed to save annotation sync timestamp")
 }
 
@@ -111,11 +139,11 @@ fn query_annotations(content_id: &str, since: &str) -> Result<Vec<(String, Strin
 
   conn
     .prepare(
-      "SELECT Text, COALESCE(Annotation, '')
+      "SELECT COALESCE(Text, ''), COALESCE(Annotation, '')
        FROM Bookmark
        WHERE VolumeID = ?
          AND Hidden = 'false'
-         AND Text != ''
+         AND (Text != '' OR Annotation != '')
          AND DateModified > ?
        ORDER BY DateModified ASC",
     )
