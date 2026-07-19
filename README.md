@@ -1,8 +1,19 @@
 # NickelStorygraph
 
-A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygraph.com). Syncs your reading progress automatically, logs highlights and notes as journal entries, and lets you manage your StoryGraph library directly from your device.
+A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygraph.com). Syncs your reading progress automatically, logs highlights and notes as journal entries, and lets you view common StorygGraph features directly from your device.
 
 > **Note:** Wi-Fi is required for all StoryGraph features. Because StoryGraph has no public API, this plugin works by scraping the website directly — it may break if StoryGraph makes changes to their UI.
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Installation](#installation)
+- [Uninstall](#uninstall)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Troubleshooting](#troubleshooting)
+- [Building - Developer Info](#building---developer-info)
+- [Architecture - Developer Info](#architecture---developer-info)
+- [Acknowledgements](#acknowledgements)
 
 ## Features
 
@@ -29,7 +40,44 @@ Accessible from the Kobo home screen without opening a book (works alongside [Ni
 
 ## Screenshots
 
-<!-- Add screenshots here -->
+### Home screen menu
+
+| | | |
+|---|---|---|
+| ![Home screen tab bar menu](screenshots/home-menu.png) | ![Currently Reading](screenshots/currently-reading.png) | ![Currently Reading — Paused tab](screenshots/currently-reading-paused.png) |
+| Tab bar menu | Currently Reading | Currently Reading — Paused |
+| ![Community Feed](screenshots/community-feed.png) | ![Reading Goals and streak](screenshots/reading-goals.png) | |
+| Community Feed | Reading Goals & streak | |
+
+### In-book menu
+
+| | |
+|---|---|
+| ![In-book reading toolbar menu](screenshots/in-book-menu.png) | ![Update book status](screenshots/book-status.png) |
+| Reading toolbar menu | Update book status |
+
+### Book linking
+
+| | |
+|---|---|
+| ![Manually link book search results](screenshots/search-results.png) | ![Edition selection](screenshots/editions.png) |
+| Manually link book | Edition selection |
+
+### Journal & reviews
+
+| | |
+|---|---|
+| ![Reading journal](screenshots/reading-journal.png) | ![Write a review — rating and thoughts](screenshots/review-ratings.png) |
+| Reading journal | Write a review |
+| ![Write a review — moods and book properties](screenshots/review-moods.png) | ![Write a review — Simple review mode](screenshots/review-simple.png) |
+| Moods & book properties | Simple review mode |
+
+### Settings
+
+| | |
+|---|---|
+| ![Settings dialog](screenshots/settings.png) | ![Settings — book information and advanced](screenshots/settings-book-info.png) |
+| Settings | Book information & advanced |
 
 ## Installation
 
@@ -123,7 +171,7 @@ Use **Book management → Manually link book** to search for the correct edition
 **Something else is broken.**
 Go to **Settings → Save system logs**, then reconnect the Kobo via USB and retrieve the log file from `.adds/NickelStorygraph/` to share when reporting the issue.
 
-## Building
+## Building - Developer Info
 
 The full build runs inside a Docker container using the [NickelTC](https://github.com/nickel-org/nickeltc) cross-compilation toolchain.
 
@@ -151,7 +199,7 @@ Other useful commands:
 | `just clean` | Remove build artifacts |
 | `just logs` | Stream logs from the Kobo over SSH (requires `KOBO_SERVER` and `KOBO_PASSWORD` env vars) |
 
-## Architecture
+## Architecture - Developer Info
 
 NickelStorygraph has two components that communicate via subprocess calls and JSON:
 
