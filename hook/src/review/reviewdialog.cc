@@ -131,6 +131,7 @@ void ReviewDialog::response(QJsonObject doc) {
   if (ctl->title != nullptr) {
     Label *title = new Label(Label::ExtraLarge, ctl->title);
     title->setAlignment(Qt::AlignCenter);
+    title->setWordWrap(true);
     title->setStyleSheet("font-weight: bold;");
     contentLayout->addWidget(title);
   }

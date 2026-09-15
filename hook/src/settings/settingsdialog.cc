@@ -230,6 +230,11 @@ QFrame *SettingsDialog::buildGeneral() {
   QObject::connect(checkboxRow, &CheckboxRow::triggered, this, &SettingsDialog::setSimpleReview);
   layout->addWidget(checkboxRow);
 
+  checkboxRow = new CheckboxRow("Prompt to review or mark finished on completion",
+                                Settings::getInstance()->getCompletionPrompt());
+  QObject::connect(checkboxRow, &CheckboxRow::triggered, this, &SettingsDialog::setCompletionPrompt);
+  layout->addWidget(checkboxRow);
+
   return frame;
 }
 
@@ -394,6 +399,8 @@ void SettingsDialog::clearLastSynced() {
 }
 
 void SettingsDialog::setSimpleReview(bool value) { Settings::getInstance()->setSimpleReview(value); }
+
+void SettingsDialog::setCompletionPrompt(bool value) { Settings::getInstance()->setCompletionPrompt(value); }
 
 void SettingsDialog::setDebug(bool value) { Settings::getInstance()->setDebug(value); }
 

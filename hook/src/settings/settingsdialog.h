@@ -23,6 +23,7 @@ public Q_SLOTS:
   void setPageThreshold(QVariant value);
 
   void setSimpleReview(bool value);
+  void setCompletionPrompt(bool value);
   void setDebug(bool value);
   void saveLogs();
 

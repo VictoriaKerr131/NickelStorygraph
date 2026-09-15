@@ -19,6 +19,11 @@ public:
 
   void run(QString contentId, bool manual = false);
 
+  // Fired independently of auto-sync/threshold state, the moment a book's
+  // reading progress first reaches 100% - offers to write a review or mark
+  // the book finished without requiring a server round-trip first.
+  void showCompletionPrompt(QString contentId);
+
 public Q_SLOTS:
   void prepareNext();
   void success();
@@ -32,13 +37,11 @@ private:
 
   QString contentId;
   int lastProgress = 0;
-  bool pendingReviewPrompt = false;
   QHash<QString, int> queue;
   QHash<QString, int> retryCount;
 
   bool pendingShelfConfirmation = false;
   int pendingShelfProgress = 0;
 
-  void showReviewPrompt();
   void showShelfConfirmation();
 };

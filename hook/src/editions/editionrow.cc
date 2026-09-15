@@ -102,7 +102,7 @@ EditionRow::EditionRow(QJsonObject json, QWidget *parent)
   hbox->addLayout(vbox, 1);
   vbox->addStretch(1);
 
-  vbox->addWidget(new ElidedLabel(Label::Medium, json.value("title").toString()));
+  vbox->addWidget(new ElidedLabel(Label::Medium, json.value("title").toString(), 2));
   vbox->addWidget(
       new ElidedLabel(Label::ExtraSmall, json.value("contributions").toVariant().toStringList().join(", ")));
 

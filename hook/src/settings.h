@@ -26,6 +26,9 @@ public:
   void setLastProgress(QString contentId, int value);
   int getLastProgress(QString contentId);
 
+  void setCompletionPrompted(QString contentId, bool value);
+  bool getCompletionPrompted(QString contentId);
+
   void setAutoSyncDefault(bool value);
   bool getAutoSyncDefault();
 
@@ -49,6 +52,9 @@ public:
 
   void setSimpleReview(bool value);
   bool getSimpleReview();
+
+  void setCompletionPrompt(bool value);
+  bool getCompletionPrompt();
 
   bool getHomeMenuEnabled();
   bool getHomeMenuReading();

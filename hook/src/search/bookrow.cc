@@ -85,7 +85,7 @@ BookRow::BookRow(QJsonObject json, QWidget *parent) : QFrame(parent), id(json.va
   layout->addLayout(textLayout, 1);
   textLayout->addStretch(1);
 
-  textLayout->addWidget(new ElidedLabel(Label::Large, json.value("title").toString()));
+  textLayout->addWidget(new ElidedLabel(Label::Large, json.value("title").toString(), 2));
   textLayout->addWidget(new ElidedLabel(Label::Avenir, getSeries(json)));
   textLayout->addWidget(new ElidedLabel(Label::Small, json.value("authors").toVariant().toStringList().join(", ")));
   textLayout->addWidget(new ElidedLabel(Label::Small, getMeta(json)));

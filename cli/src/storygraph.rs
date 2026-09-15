@@ -724,11 +724,26 @@ fn scrape_shelf_section(doc: &Html, container_selector: &str, status: &str) -> V
         .map(|el| el.text().collect::<String>().trim().to_owned())
         .unwrap_or_default();
 
-      let progress: u32 = pane
-        .select(&progress_sel)
-        .next()
-        .and_then(|el| el.value().attr("value"))
-        .and_then(|v| v.parse().ok())
+      // Progress bar width first, same as parse_user_book()/find_on_shelf(): audiobooks
+      // are tracked by time on StoryGraph and don't render the hidden percent input at
+      // all, so that selector alone silently reads back 0 for them.
+      let pane_html = pane.html();
+      let progress: u32 = pane_html
+        .find("edit-progress")
+        .and_then(|i| {
+          let s = &pane_html[i..];
+          let w = s.find("width:")?;
+          let pct = s[w + 6..].trim_start();
+          let end = pct.find('%')?;
+          pct[..end].trim().parse::<u32>().ok()
+        })
+        .or_else(|| {
+          pane
+            .select(&progress_sel)
+            .next()
+            .and_then(|el| el.value().attr("value"))
+            .and_then(|v| v.parse().ok())
+        })
         .unwrap_or(0);
 
       let edition_text = pane
@@ -1246,8 +1261,11 @@ pub fn title_match_score(query_title: &str, result_title: &str) -> f32 {
 
   let tokenize = |s: &str| -> Vec<String> {
     s.to_lowercase()
-      .split(|c: char| !c.is_alphabetic())
-      .filter(|w| w.len() > 1 && !STOPS.contains(w))
+      // Split on non-alphanumeric so volume/edition numbers ("Vol. 1" vs "Vol. 2")
+      // survive as their own tokens instead of vanishing as delimiter characters -
+      // otherwise titles that only differ by a number score as identical matches.
+      .split(|c: char| !c.is_alphanumeric())
+      .filter(|w| !w.is_empty() && !STOPS.contains(w) && (w.len() > 1 || w.chars().all(|c| c.is_ascii_digit())))
       .map(str::to_owned)
       .collect()
   };
@@ -1264,7 +1282,8 @@ pub fn title_match_score(query_title: &str, result_title: &str) -> f32 {
 
 /// Searches the user's currently-reading shelf for a book matching `query_title` without
 /// needing a book_id first. Parses shelf HTML once; returns `(book_id, progress_percent)`
-/// for the best title match (score ≥ 0.5), or `None` if nothing matches.
+/// for the best title match (score ≥ 0.9 - deliberately strict, see below), or `None`
+/// if nothing matches.
 pub fn find_on_shelf(query_title: &str) -> Result<Option<(String, u32)>> {
   assert_credentials();
   let user = get_user()?;
@@ -1294,12 +1313,34 @@ pub fn find_on_shelf(query_title: &str) -> Result<Option<(String, u32)>> {
     }
 
     let score = title_match_score(query_title, &title);
-    if score >= 0.5 {
-      let progress: u32 = pane
-        .select(&progress_sel)
-        .next()
-        .and_then(|el| el.value().attr("value"))
-        .and_then(|v| v.parse().ok())
+    // High bar deliberately: this is meant to find the *exact* book already on the
+    // shelf with no confirmation step, so a near-duplicate title (e.g. another volume
+    // of the same series, differing by only one word) must not qualify. 0.5 let a
+    // 5/6-word match through, which is exactly the "Vol. 1" vs "Vol. 2" case.
+    if score >= 0.9 {
+      let pane_html = pane.html();
+
+      // Progress bar width first, same as parse_user_book(): audiobooks are
+      // tracked by time on StoryGraph and don't render the hidden percent
+      // input at all, so that selector alone silently reads back 0 for them.
+      // The rendered progress bar's width is present regardless of tracking
+      // method and is what the site itself shows the user.
+      let progress: u32 = pane_html
+        .find("edit-progress")
+        .and_then(|i| {
+          let s = &pane_html[i..];
+          let w = s.find("width:")?;
+          let pct = s[w + 6..].trim_start();
+          let end = pct.find('%')?;
+          pct[..end].trim().parse::<u32>().ok()
+        })
+        .or_else(|| {
+          pane
+            .select(&progress_sel)
+            .next()
+            .and_then(|el| el.value().attr("value"))
+            .and_then(|v| v.parse().ok())
+        })
         .unwrap_or(0);
 
       if best.as_ref().map_or(true, |(_, s, _)| score > *s) {

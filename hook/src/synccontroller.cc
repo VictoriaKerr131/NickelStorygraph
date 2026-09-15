@@ -69,6 +69,16 @@ void SyncController::pageChanged() {
 
   Settings *settings = Settings::getInstance();
 
+  // Independent of the per-book auto-sync toggle below - completion is a
+  // one-time user prompt, not a recurring background sync, so it shouldn't
+  // require the user to have opted a book into auto-sync just to be asked
+  // whether they finished it.
+  if (settings->getCompletionPrompt() && queue->getReadProgress(contentId) == 100 &&
+      !settings->getCompletionPrompted(contentId)) {
+    settings->setCompletionPrompted(contentId, true);
+    queue->showCompletionPrompt(contentId);
+  }
+
   if (!settings->isEnabled(contentId))
     return;
 

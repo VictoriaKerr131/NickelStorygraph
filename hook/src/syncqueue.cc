@@ -118,8 +118,6 @@ void SyncQueue::run(QString contentId, bool manual) {
       pendingShelfConfirmation = true;
       pendingShelfProgress = doc.value("progress_percent").toInt(0);
     }
-    if (lastProgress == 100)
-      pendingReviewPrompt = true;
   });
   QObject::connect(cli, &CLI::success, this, &SyncQueue::success);
   QObject::connect(cli, &CLI::failure, this, &SyncQueue::closeDialog);
@@ -163,18 +161,10 @@ void SyncQueue::success() {
   finished();
 
   lastProgress = 0;
-  bool prompt = pendingReviewPrompt;
-  pendingReviewPrompt = false;
 
   if (dialog != nullptr) {
     ConfirmationDialog__setText(dialog, "Success!");
-    if (prompt) {
-      QTimer::singleShot(800, this, [this]() { closeDialog(); showReviewPrompt(); });
-    } else {
-      QTimer::singleShot(800, this, &SyncQueue::closeDialog);
-    }
-  } else if (prompt) {
-    showReviewPrompt();
+    QTimer::singleShot(800, this, &SyncQueue::closeDialog);
   }
 }
 
@@ -214,18 +204,24 @@ void SyncQueue::showShelfConfirmation() {
   prompt->open();
 }
 
-void SyncQueue::showReviewPrompt() {
+void SyncQueue::showCompletionPrompt(QString contentId) {
   ConfirmationDialog *prompt = ConfirmationDialogFactory__getConfirmationDialog(nullptr);
-  ConfirmationDialog__setTitle(prompt, "Book complete!");
-  ConfirmationDialog__setText(prompt, "Would you like to write a review?");
-  ConfirmationDialog__setAcceptButtonText(prompt, "Yes");
-  ConfirmationDialog__setRejectButtonText(prompt, "No");
-  ConfirmationDialog__showCloseButton(prompt, false);
+  ConfirmationDialog__setTitle(prompt, "Book Complete!");
+  ConfirmationDialog__setText(prompt, "Let StoryGraph know you finished: Write a review, or update your reading status?");
+  ConfirmationDialog__setAcceptButtonText(prompt, "Write a review");
+  ConfirmationDialog__setRejectButtonText(prompt, "Mark as finished");
+  ConfirmationDialog__showCloseButton(prompt, true);
+
   QObject::connect(prompt, &QDialog::accepted, prompt, [prompt]() {
     ReviewDialog::show();
     prompt->deleteLater();
   });
-  QObject::connect(prompt, &QDialog::rejected, prompt, &QDialog::deleteLater);
+  QObject::connect(prompt, &QDialog::rejected, this, [this, prompt, contentId]() {
+    CLI::Options options;
+    options.contentId = contentId;
+    CLI::setUserBook(3, options);
+    prompt->deleteLater();
+  });
   prompt->open();
 }
 

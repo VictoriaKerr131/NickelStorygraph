@@ -65,6 +65,7 @@ QString Settings::getLinkedId(QString contentId) { return getValue(contentId, "l
 void Settings::clearBookLink(QString contentId) {
   setValue(contentId, "linkedbook", QVariant());
   setValue(contentId, "progress", QVariant());
+  setValue(contentId, "completion_prompted", QVariant());
 }
 
 void Settings::setStatus(QString contentId, int value) { setValue(contentId, "status", value > 0 ? QVariant(value) : QVariant()); }
@@ -74,6 +75,10 @@ int Settings::getStatus(QString contentId) { return getValue(contentId, "status"
 void Settings::setLastProgress(QString contentId, int value) { setValue(contentId, "progress", value); }
 
 int Settings::getLastProgress(QString contentId) { return getValue(contentId, "progress").toInt(); }
+
+void Settings::setCompletionPrompted(QString contentId, bool value) { setValue(contentId, "completion_prompted", value); }
+
+bool Settings::getCompletionPrompted(QString contentId) { return getValue(contentId, "completion_prompted", false).toBool(); }
 
 void Settings::setSyncDaily(int value) { config->setValue("sync_daily", value); }
 
@@ -155,6 +160,10 @@ void Settings::setSimpleReview(bool value) {
 }
 
 bool Settings::getSimpleReview() { return config->value("simple_review", false).toBool(); }
+
+void Settings::setCompletionPrompt(bool value) { config->setValue("completion_prompt", value); }
+
+bool Settings::getCompletionPrompt() { return config->value("completion_prompt", true).toBool(); }
 
 bool Settings::getHomeMenuEnabled() { return config->value("home_menu", true).toBool(); }
 bool Settings::getHomeMenuReading() { return config->value("home_menu_reading", true).toBool(); }

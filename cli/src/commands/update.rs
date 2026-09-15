@@ -83,14 +83,17 @@ pub fn run(args: Update) -> Result<()> {
   Ok(())
 }
 
-/// Picks the best match from `results` for `title`, requiring at least 50% of meaningful
-/// query words to appear in the result title. Returns None if nothing scores well enough.
+/// Picks the best match from `results` for `title`, requiring a near-exact match (≥ 90%
+/// of meaningful query words present). This runs with no confirmation step, so it must be
+/// strict enough to reject other volumes/editions of the same series (which can otherwise
+/// share every word but a volume number) rather than silently linking the wrong book.
+/// Returns None if nothing scores well enough.
 fn best_title_match(results: Vec<Book>, title: &str) -> Option<Book> {
   results
     .into_iter()
     .filter_map(|book| {
       let score = title_match_score(title, &book.title);
-      if score >= 0.5 { Some((book, score)) } else { None }
+      if score >= 0.9 { Some((book, score)) } else { None }
     })
     .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
     .map(|(book, _)| book)
