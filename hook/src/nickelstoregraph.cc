@@ -315,6 +315,26 @@ static bool nickelMenuDetected = false;
 typedef void (*NmMenuHook2)(QWidget *, QWidget *);
 static NmMenuHook2 nmMenuHook2 = nullptr;
 
+// --- NickelHardcover coexistence ---
+//
+// Same problem as NickelMenu above, but for NickelHardcover: this project was
+// forked from it and still hooks the exact same ReadingController::setVolume
+// and ReadingMenuView constructor symbols. libstorygraph.so loads after
+// libhardcover.so alphabetically, so ours are the hooks libnickel calls and
+// NickelHardcover's progress sync and reading menu button silently never run.
+// When it's loaded, we call its hooks in place of the true originals (they
+// call through to the true originals themselves), the same way we call
+// nmMenuHook2 above.
+//
+// SupportedLocales is deliberately not chained: both mods' hooks insert the
+// same "English (UK)" entry, so calling both would list it twice.
+typedef void (*HcSetVolume)(ReadingController *, Volume *, Bookmark *);
+typedef void (*HcReadingMenuViewConstructor)(ReadingMenuView *, QWidget *, bool);
+typedef void (*HcReadingMenuViewConstructor2)(ReadingMenuView *, QWidget *, QByteArray const &, bool);
+static HcSetVolume hcSetVolume = nullptr;
+static HcReadingMenuViewConstructor hcReadingMenuViewConstructor = nullptr;
+static HcReadingMenuViewConstructor2 hcReadingMenuViewConstructor2 = nullptr;
+
 // The home screen tab bar button, cached so toggling "Show StoryGraph button
 // on home screen" in Settings can show/hide it immediately rather than
 // requiring Nickel to restart and reconstruct MainNavView.
@@ -431,6 +451,18 @@ int nickelstoregraph_init() {
   nickelMenuDetected = nmMenuHook2 != nullptr;
   nh_log("nickelstoregraph_init: nickelMenuDetected=%s", nickelMenuDetected ? "true" : "false");
 
+  void *hcHandle = dlopen("/usr/local/Kobo/imageformats/libhardcover.so", RTLD_NOLOAD | RTLD_LAZY);
+  if (hcHandle) {
+    hcSetVolume = reinterpret_cast<HcSetVolume>(dlsym(hcHandle, "_nh_ReadingController__setVolume"));
+    hcReadingMenuViewConstructor =
+        reinterpret_cast<HcReadingMenuViewConstructor>(dlsym(hcHandle, "_nh_ReadingMenuView__constructor"));
+    hcReadingMenuViewConstructor2 =
+        reinterpret_cast<HcReadingMenuViewConstructor2>(dlsym(hcHandle, "_nh_ReadingMenuView__constructor_2"));
+    dlclose(hcHandle);
+  }
+  nh_log("nickelstoregraph_init: hcSetVolume=%p hcReadingMenuViewConstructor=%p hcReadingMenuViewConstructor2=%p",
+         (void *)hcSetVolume, (void *)hcReadingMenuViewConstructor, (void *)hcReadingMenuViewConstructor2);
+
   return 0;
 }
 
@@ -468,8 +500,15 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
     }
   }
 
-  nh_log("ReadingController::setVolume calling original");
-  ReadingController__setVolume(_this, volume, bookmark);
+  if (hcSetVolume) {
+    // NickelHardcover's hook calls through to the true original itself - see
+    // the NickelHardcover coexistence comment above.
+    nh_log("ReadingController::setVolume calling NickelHardcover's hook");
+    hcSetVolume(_this, volume, bookmark);
+  } else {
+    nh_log("ReadingController::setVolume calling original");
+    ReadingController__setVolume(_this, volume, bookmark);
+  }
   nh_log("ReadingController::setVolume original returned");
 }
 
@@ -495,7 +534,10 @@ void injectMenuWidget(ReadingMenuView *parent) {
 extern "C" __attribute__((visibility("default"))) void _nh_ReadingMenuView__constructor(ReadingMenuView *_this,
                                                                                         QWidget *parent, bool unknown) {
   nh_log("ReadingMenuView::ReadingMenuView(%p, %p, %s)", _this, parent, unknown ? "true" : "false");
-  ReadingMenuView__constructor(_this, parent, unknown);
+  if (hcReadingMenuViewConstructor)
+    hcReadingMenuViewConstructor(_this, parent, unknown);
+  else
+    ReadingMenuView__constructor(_this, parent, unknown);
   nh_log("ReadingMenuView::ReadingMenuView original returned, injecting");
   injectMenuWidget(parent);
   nh_log("ReadingMenuView::ReadingMenuView inject done");
@@ -505,7 +547,10 @@ extern "C" __attribute__((visibility("default"))) void
 _nh_ReadingMenuView__constructor_2(ReadingMenuView *_this, QWidget *parent, QByteArray const &unknownArray,
                                    bool unknownBool) {
   nh_log("ReadingMenuView::ReadingMenuView(%p, %p, %s)", _this, parent, unknownBool ? "true" : "false");
-  ReadingMenuView__constructor_2(_this, parent, unknownArray, unknownBool);
+  if (hcReadingMenuViewConstructor2)
+    hcReadingMenuViewConstructor2(_this, parent, unknownArray, unknownBool);
+  else
+    ReadingMenuView__constructor_2(_this, parent, unknownArray, unknownBool);
   injectMenuWidget(parent);
 }
 
