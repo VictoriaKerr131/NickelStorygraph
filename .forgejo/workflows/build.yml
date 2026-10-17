@@ -12,6 +12,8 @@ jobs:
       - uses: ./.forgejo/nickeltc
         with:
           args: just build package
+      - name: Verify build artifacts
+        run: sh test/check_artifacts.sh
       - uses: forgejo/upload-artifact@v5
         with:
           name: NickelStorygraph

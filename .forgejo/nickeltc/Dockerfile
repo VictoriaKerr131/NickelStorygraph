@@ -86,3 +86,6 @@ RUN mkdir -p /rustup /cargo && \
 ENV PATH=$CARGO_HOME/bin:$PATH
 
 RUN cargo install resvg
+
+# The Forgejo action (using: docker) passes its `args` to this entrypoint.
+ENTRYPOINT ["/bin/bash", "-c"]

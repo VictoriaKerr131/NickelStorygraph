@@ -1,0 +1,9 @@
+on: [push]
+jobs:
+  symbols:
+    name: Hook symbols / 5.18 firmware
+    runs-on: codeberg-medium
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check hook symbols against 5.18 libnickel
+        run: python3 test/check_symbols.py

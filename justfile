@@ -81,6 +81,12 @@ clean:
   rm -rf mnt
   for f in hook/res/*.png; do git ls-files --error-unmatch $f > /dev/null 2>&1 || rm -v $f; done
 
+# Run all checks: symbol regression (always) + artifact checks (after `just build package`)
+[group('test')]
+test:
+  python3 test/check_symbols.py
+  sh test/check_artifacts.sh
+
 # Run `logread` over ssh
 [group('helpers')]
 logs:
