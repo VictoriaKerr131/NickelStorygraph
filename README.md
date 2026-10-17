@@ -222,6 +222,8 @@ just build-package
 just copy-package
 ```
 
+Before deploying to a device, work through the [smoke-test checklist](SMOKE-TEST.md) — it covers the two Qt6 ABI changes that need on-device verification.
+
 Other useful commands:
 
 | Command | Description |
