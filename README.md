@@ -17,6 +17,18 @@ A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygrap
 
 > **Note:** Wi-Fi is required for all StoryGraph features. Because StoryGraph has no public API, this plugin works by scraping the website directly — it may break if StoryGraph makes changes to their UI.
 
+## Why this fork
+
+Upstream NickelStorygraph targets Kobo firmware 4.x, which runs Qt 5.2.1. Kobo/Tolino firmware **5.18** rebased Nickel onto **Qt 6.5.2**, which broke every native plugin. This fork ports the plugin to Qt 6 so it runs on firmware 5.18 and 6.0:
+
+- three `libnickel` symbols changed ABI (verified against `libnickel.so.1.0.0`; see `test/libnickel-5.18.syms.gz`),
+- Qt 6 turned `Qt::WindowType` into an `enum class`, breaking a constructor call,
+- NickelHook needed a Qt 6 port (Failsafe fix and hook chaining), and
+- packaging and the toolchain changed (`Kobo.tgz` instead of `KoboRoot.tgz`; a Qt 6.5.2 cross toolchain instead of NickelTC).
+
+For firmware 4.x, use the upstream `main` branch. See [Acknowledgements](#acknowledgements) for the people whose work this fork builds on.
+
+- [Why this fork](#why-this-fork)
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Installation](#installation)
@@ -230,7 +242,11 @@ NickelStorygraph has two components that communicate via subprocess calls and JS
 
 ## Acknowledgements
 
-- Forked from [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover) by Ava Johnson, a Kobo plugin for [Hardcover](https://hardcover.app). Large portions of the hook and CLI infrastructure are derived from that project.
-- Uses [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin for Kobo plugin injection. The Qt 6 port for firmware 5.18+ (Failsafe fix and hook chaining) is the [nicoverbruggen/NickelHook](https://github.com/nicoverbruggen/NickelHook) fork, branch `qt6-support`.
-- Coexists with [NickelMenu](https://pgaskin.net/NickelMenu/) by Patrick Gaskin, whose source was read directly to make the two mods share the home screen tab bar correctly (chaining into NickelMenu's own button-injection hook so both buttons appear) and to size our tab bar icon at runtime the same way NickelMenu sizes its own custom menu icons.
-- Built using a Qt 6.5.2 ARM cross-compilation toolchain for Kobo firmware 5.18+ — the Qt 6 counterpart of [NickelTC](https://github.com/pgaskin/NickelTC). The toolchain definition under `.forgejo/nickeltc/qt6/` is derived from the Qt 6 port of [NickelMenu](https://pgaskin.net/NickelMenu/) by nicoverbruggen.
+This fork builds on the work of the following people — without them, none of this would exist.
+
+- **Victoria Kerr** — author of the original [NickelStorygraph](https://github.com/VictoriaKerr131/NickelStorygraph).
+- **Ava Johnson (StrayRose)** — author of [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover), a Kobo plugin for [Hardcover](https://hardcover.app), from which NickelStorygraph was forked. Large portions of the hook and CLI infrastructure derive from that project.
+- **Patrick Gaskin (pgaskin)** — author of [NickelHook](https://github.com/pgaskin/NickelHook) (plugin injection), [NickelMenu](https://pgaskin.net/NickelMenu/) (whose source was read to make the two mods share the home-screen tab bar correctly, and to size the tab-bar icon at runtime the same way NickelMenu does), and [NickelTC](https://github.com/pgaskin/NickelTC) (the Qt 5 cross toolchain this fork replaces).
+- **Nico Verbruggen (nicoverbruggen)** — author of [Kobalt](https://github.com/nicoverbruggen/kobalt) and the [Qt 6 NickelMenu port](https://github.com/nicoverbruggen/NickelMenu) (branch `qt6-support`). This fork uses his [NickelHook Qt 6 port](https://github.com/nicoverbruggen/NickelHook) (Failsafe fix and hook chaining) and the Qt 6.5.2 toolchain definition under `.forgejo/nickeltc/qt6/`.
+
+The 5.18 symbol reference (`test/libnickel-5.18.syms.gz`) was extracted from `libnickel.so.1.0.0` of an official Kobo/Tolino 5.18 firmware image.
