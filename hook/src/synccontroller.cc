@@ -124,6 +124,14 @@ int SyncController::getReadProgress() { return queue->getReadProgress(contentId)
 
 void SyncController::manualSync() {
   nh_log("SyncController::manualSync()");
+  // Read the current progress directly so a manual sync also works right after
+  // opening a book, when the QStackedWidget::currentChanged signal (which
+  // normally queues the progress) may not have fired yet.
+  MainWindowController *mwc = MainWindowController__sharedInstance();
+  QWidget *cv = MainWindowController__currentView(mwc);
+  if (cv && cv->objectName() == "ReadingView") {
+    queue->updateReadProgress(contentId);
+  }
   queue->run(contentId, true);
 }
 
