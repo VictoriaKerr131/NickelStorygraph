@@ -60,7 +60,7 @@ void (*TouchLabel__setHitStateEnabled)(TouchLabel *_this, bool enabled);
 
 TouchLabel *construct_TouchLabel(QWidget *parent) {
   TouchLabel *label = reinterpret_cast<TouchLabel *>(calloc(1, 2048));
-  TouchLabel__constructor(label, parent, 0);
+  TouchLabel__constructor(label, parent, Qt::WindowType());
   return label;
 }
 

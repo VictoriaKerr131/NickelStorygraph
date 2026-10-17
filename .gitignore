@@ -3,6 +3,7 @@ CLAUDE.md
 PLAN.md
 plan.md
 KoboRoot.tgz
+hook/Kobo.tgz
 
 # Rust build output
 cli/target/
@@ -13,6 +14,9 @@ cli/Cargo.lock
 *.moc
 *.moc.o
 
+# C++ dependency files (from -MMD -MP)
+*.d
+
 # Compiled Qt resources
 *.rcc
 *.rcc.o
@@ -22,3 +26,6 @@ hook/res/*.png
 
 # Compiled shared library
 hook/libstorygraph.so
+
+# Package output (CLI + config, copied to .adds on the device)
+mnt/
