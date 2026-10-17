@@ -10,6 +10,16 @@
 # binutils toolchain (readelf/nm) on PATH.
 set -eu
 
+# Portable ELF readers: Linux CI has readelf; macOS has llvm-objdump (via
+# xcrun) but no llvm-readelf. `file` exists on both and reports the machine.
+dynsec_cmd() {
+  if command -v readelf >/dev/null 2>&1; then readelf -d "$1";
+  elif command -v greadelf >/dev/null 2>&1; then greadelf -d "$1";
+  elif command -v llvm-objdump >/dev/null 2>&1; then llvm-objdump -p "$1";
+  elif command -v xcrun >/dev/null 2>&1; then xcrun llvm-objdump -p "$1";
+  else echo "FAIL: no ELF dynamic-section reader"; exit 1; fi
+}
+
 SO=hook/libstorygraph.so
 TGZ=hook/Kobo.tgz
 ADDS=mnt/onboard/.adds/NickelStorygraph
@@ -17,11 +27,12 @@ ADDS=mnt/onboard/.adds/NickelStorygraph
 echo "== Test 2: libstorygraph.so =="
 [ -f "$SO" ] || { echo "FAIL: $SO missing"; exit 1; }
 
-machine=$(readelf -h "$SO" | awk '/Machine:/{print $2}')
-echo "  ELF machine: $machine"
-[ "$machine" = "ARM" ] || { echo "FAIL: expected ARM, got '$machine'"; exit 1; }
+machine=$(file -b "$SO")
+echo "  file: $machine"
+printf '%s' "$machine" | grep -q 'ARM' \
+  || { echo "FAIL: expected ARM ELF, got '$machine'"; exit 1; }
 
-readelf -d "$SO" | grep -q 'SONAME.*libstorygraph.so' \
+dynsec_cmd "$SO" | grep -q 'SONAME.*libstorygraph.so' \
   || { echo "FAIL: wrong or missing SONAME"; exit 1; }
 
 for sym in _nh_ReadingController__setVolume \
