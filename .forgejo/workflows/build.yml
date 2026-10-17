@@ -14,5 +14,7 @@ jobs:
           args: just build package
       - uses: forgejo/upload-artifact@v5
         with:
-          name: KoboRoot.tgz
-          path: KoboRoot.tgz
+          name: NickelStorygraph
+          path: |
+            hook/Kobo.tgz
+            mnt/onboard/.adds/NickelStorygraph/

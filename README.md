@@ -94,11 +94,16 @@ Accessible from the Kobo home screen without opening a book (works alongside [Ni
 
 ## Installation
 
-1. Download `KoboRoot.tgz` from the [releases page](../../releases).
-2. Connect your Kobo to your computer via USB.
-3. Copy `KoboRoot.tgz` into the `.kobo/` folder on the device root. The `.kobo` folder may be hidden — on Windows, enable "Show hidden items" in File Explorer; on macOS, press `Cmd+Shift+.` in Finder.
-4. Safely eject the Kobo — it will install the plugin automatically on reconnect.
-5. Once the Kobo restarts, reconnect via USB. Open the `.adds/NickelStorygraph/` folder on the device, copy `config_example.ini`, rename the copy to `config.ini`, and fill in your credentials (see below).
+> **Firmware 5.18+ (Qt6):** this branch targets Kobo/Tolino firmware 5.18 and
+> 6.0, which use Qt 6. Download `Kobo.tgz` (the plugin hook) and the
+> `NickelStorygraph` folder (CLI and config) from the [releases page](../../releases).
+> For firmware 4.x (Qt5), use the `main` branch instead.
+
+1. Connect your Kobo/Tolino to your computer via USB.
+2. Copy `Kobo.tgz` into the `.kobo/` folder on the device root. The `.kobo` folder may be hidden — on Windows, enable "Show hidden items" in File Explorer; on macOS, press `Cmd+Shift+.` in Finder.
+3. Copy the `NickelStorygraph` folder into the `.adds/` folder on the device root (so that you end up with `.adds/NickelStorygraph/`).
+4. Safely eject the device — it will install the plugin automatically on reconnect.
+5. Once the device restarts, reconnect via USB. Open the `.adds/NickelStorygraph/` folder, copy `config_example.ini`, rename the copy to `config.ini`, and fill in your credentials (see below).
 
 ## Uninstall
 
@@ -186,15 +191,19 @@ Go to **Settings → Save system logs**, then reconnect the Kobo via USB and ret
 
 ## Building - Developer Info
 
-The full build runs inside a Docker container using the [NickelTC](https://github.com/nickel-org/nickeltc) cross-compilation toolchain.
+The full build runs inside a Docker container using a Qt 6.5.2 cross-compilation
+toolchain for Kobo firmware 5.18+ (the Qt 6 counterpart of
+[NickelTC](https://github.com/pgaskin/NickelTC)). It builds Qt 6.5.2 from Kobo's
+published source against Ubuntu 22.04 armhf multiarch as the sysroot — see
+`.forgejo/nickeltc/Dockerfile` and `.forgejo/nickeltc/qt6/`.
 
 **Prerequisites:** Docker, [just](https://github.com/casey/just), [resvg](https://github.com/RazrFalcon/resvg)
 
 ```sh
-# First time — build the toolchain image
+# First time — build the toolchain image (Qt 6.5.2; takes a while)
 just build-tc
 
-# Build KoboRoot.tgz
+# Build hook/Kobo.tgz and mnt/onboard/.adds/NickelStorygraph/
 just build-package
 
 # Build and copy directly to a USB-connected Kobo (requires sudo)
@@ -216,12 +225,12 @@ Other useful commands:
 
 NickelStorygraph has two components that communicate via subprocess calls and JSON:
 
-- **Hook** (`hook/`) — A Qt5/C++ plugin that injects into Kobo's Nickel UI. Handles all UI rendering, menu items, dialogs, and user input. Spawns the CLI as a child process and reads its JSON output.
+- **Hook** (`hook/`) — A Qt6/C++ plugin that injects into Kobo's Nickel UI (Qt 5 on firmware 4.x — see the `main` branch). Handles all UI rendering, menu items, dialogs, and user input. Spawns the CLI as a child process and reads its JSON output.
 - **CLI** (`cli/`) — A Rust binary cross-compiled for ARM Linux. Contains all business logic: StoryGraph web scraping (session auth, progress updates, journal, reviews, search), Kobo SQLite queries for reading position and annotations, ISBN extraction from EPUB metadata, and edition resolution.
 
 ## Acknowledgements
 
 - Forked from [NickelHardcover](https://codeberg.org/StrayRose/NickelHardcover) by Ava Johnson, a Kobo plugin for [Hardcover](https://hardcover.app). Large portions of the hook and CLI infrastructure are derived from that project.
-- Uses [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin for Kobo plugin injection.
+- Uses [NickelHook](https://github.com/pgaskin/NickelHook) by Patrick Gaskin for Kobo plugin injection. The Qt 6 port for firmware 5.18+ (Failsafe fix and hook chaining) is the [nicoverbruggen/NickelHook](https://github.com/nicoverbruggen/NickelHook) fork, branch `qt6-support`.
 - Coexists with [NickelMenu](https://pgaskin.net/NickelMenu/) by Patrick Gaskin, whose source was read directly to make the two mods share the home screen tab bar correctly (chaining into NickelMenu's own button-injection hook so both buttons appear) and to size our tab bar icon at runtime the same way NickelMenu sizes its own custom menu icons.
-- Built using [NickelTC](https://github.com/nickel-org/nickeltc) by Patrick Gaskin, the ARM cross-compilation toolchain for Kobo development.
+- Built using a Qt 6.5.2 ARM cross-compilation toolchain for Kobo firmware 5.18+ — the Qt 6 counterpart of [NickelTC](https://github.com/pgaskin/NickelTC). The toolchain definition under `.forgejo/nickeltc/qt6/` is derived from the Qt 6 port of [NickelMenu](https://pgaskin.net/NickelMenu/) by nicoverbruggen.
