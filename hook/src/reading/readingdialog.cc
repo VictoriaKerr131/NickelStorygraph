@@ -10,7 +10,7 @@
 #include <NickelHook.h>
 
 #include "../cli.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "readingdialog.h"
 #include "readingrow.h"
 #include "../widgets/label.h"
@@ -122,52 +122,31 @@ void ReadingDialog::fillPages(PagedStack *stack, const QJsonArray &books) {
     return;
   }
 
-  // sizeHint() is unreliable before layout (ElidedLabel returns huge heights at
-  // width=0). Use a fixed per-row estimate. Most titles fit on one line, so a
-  // flat estimate sized for the two-line worst case wastes a lot of room and
-  // under-fits pages needlessly — instead, estimate per row based on title
-  // length: only titles likely to actually wrap get the taller estimate.
-  // Over-fitting a page is still worse than under-fitting, so ROW_H_2LINE
-  // stays conservative.
-  static const int ROW_H_1LINE = 120;
-  static const int ROW_H_2LINE = 150;
-  static const int TITLE_WRAP_CHARS = 32; // rough length before a title wraps at typical row width
+  // Fixed page size. Height-based fitting is unreliable here: the stacks are
+  // filled before layout has run, so getAvailableHeight() isn't trustworthy
+  // and pages were over-filled (rows squished).
+  static const int ROWS_PER_PAGE = 4;
   static const int ROW_GAP = 10;
 
-  int availableHeight = stack->getAvailableHeight();
-  if (availableHeight <= 0) availableHeight = 800;
-
-  QWidget     *page  = new QWidget(this);
-  QVBoxLayout *rows  = new QVBoxLayout(page);
-  rows->setContentsMargins(0, 0, 0, 0);
-  rows->setSpacing(ROW_GAP);
-  int  pageHeight = 0;
-  bool firstOnPage = true;
+  QWidget     *page = nullptr;
+  QVBoxLayout *rows = nullptr;
 
   for (int i = 0; i < books.size(); i++) {
-    QJsonObject book = books.at(i).toObject();
-    int rowH = book.value("title").toString().length() > TITLE_WRAP_CHARS ? ROW_H_2LINE : ROW_H_1LINE;
+    if (i % ROWS_PER_PAGE == 0) {
+      if (page) {
+        rows->addStretch(1);
+        stack->addPage(page);
+      }
 
-    ReadingRow *row = new ReadingRow(book, stack);
-    int cost = rowH + (firstOnPage ? 0 : ROW_GAP);
-
-    if (!firstOnPage && pageHeight + cost > availableHeight) {
-      rows->addStretch(1);
-      stack->addPage(page);
-
-      page  = new QWidget(this);
-      rows  = new QVBoxLayout(page);
+      page = new QWidget(this);
+      rows = new QVBoxLayout(page);
       rows->setContentsMargins(0, 0, 0, 0);
       rows->setSpacing(ROW_GAP);
-      pageHeight  = 0;
-      firstOnPage = true;
-      cost        = rowH;
     }
 
-    if (firstOnPage) row->setProperty("noBorder", QVariant(true));
+    ReadingRow *row = new ReadingRow(books.at(i).toObject(), stack);
+    if (i % ROWS_PER_PAGE == 0) row->setProperty("noBorder", QVariant(true));
     rows->addWidget(row);
-    pageHeight  += cost;
-    firstOnPage  = false;
   }
 
   rows->addStretch(1);

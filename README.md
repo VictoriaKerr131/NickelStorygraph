@@ -4,7 +4,9 @@
 
 Hi Fellow Redditors! It's come to my attention that this project has been shared on both Mobileread and Reddit over the last few weeks and while I'm very happy that others are getting use out of one of my personal pet projects I just want to set some expectations around support and updates. I built this project for myself because I often forget to update my progress on Storygraph and I knew there had to be a way to build an integration despite the lack of public API. 
 
-At this point I didn't intend for this to be used by the masses, just a few friends who I convinced to come to the Kobo / StoryGraph dark side from Kindle. While all are absolutely welcome to use it in its current state, there may still be some issues and bugs that I haven't come across yet and support for resolution or feature requests etc will be very limited.
+At this point I didn't intend for this to be used by the masses, just a few friends who I convinced to come to the Kobo / StoryGraph dark side from Kindle. While all are absolutely welcome to use it in its current state, there may still be some issues and bugs that I haven't come across yet and support for resolution or feature requests etc. will be limited to what I can do in my free time.
+
+> **Note:** This plugin does not currently support Firmware 5.x as Kobo devices are not yet on that version and those are all I have available for testing. I will upgrade the plugin to support later versions if / when Kobo makes the switch. 
 
 Thanks for your understanding! 
 
@@ -50,6 +52,7 @@ Accessible from the Kobo home screen without opening a book (works alongside [Ni
 - **Currently Reading** — Current and paused books with progress, in a tabbed view
 - **Community Feed** — Scrollable view of your friends' reading progress
 - **Reading Goals** — Progress towards your Page / Minutes / Books goals set on StoryGraph, plus your reading streak (current streak, longest streak, and streak requirement) if you have one set up
+
 
 ## Screenshots
 
@@ -98,7 +101,7 @@ Accessible from the Kobo home screen without opening a book (works alongside [Ni
 2. Connect your Kobo to your computer via USB.
 3. Copy `KoboRoot.tgz` into the `.kobo/` folder on the device root. The `.kobo` folder may be hidden — on Windows, enable "Show hidden items" in File Explorer; on macOS, press `Cmd+Shift+.` in Finder.
 4. Safely eject the Kobo — it will install the plugin automatically on reconnect.
-5. Once the Kobo restarts, reconnect via USB. Open the `.adds/NickelStorygraph/` folder on the device, copy `config_example.ini`, rename the copy to `config.ini`, and fill in your credentials (see below).
+5. Once the Kobo restarts, log in by following [Logging in to StoryGraph](#logging-in-to-storygraph) below. The plugin won't work until you do this.
 
 ## Uninstall
 
@@ -110,20 +113,65 @@ Alternatively, delete `.adds/NickelStorygraph/` from the device's internal stora
 
 ## Configuration
 
-The config file lives at `.adds/NickelStorygraph/config.ini` on the Kobo's internal storage. Open `config_example.ini` for the full list of options with descriptions. The required settings are your StoryGraph session cookies:
+All settings live in one file on the Kobo: `.adds/NickelStorygraph/config.ini`. `config_example.ini` in the same folder is only a reference copy. The plugin never reads it, so editing it does nothing.
+
+### Logging in to StoryGraph
+
+StoryGraph has no public API or login screen the plugin can use, so you log in by copying two cookies from your web browser into `config.ini`. You only need to do this once, and again whenever the cookies expire.
+
+**Step 1: Get your cookies from a computer browser**
+
+1. On a computer, log in to [app.thestorygraph.com](https://app.thestorygraph.com) in Chrome, Edge, or Firefox.
+2. Press `F12` to open the developer tools.
+3. Open the cookies list:
+   - **Chrome / Edge:** **Application** tab → **Storage** → **Cookies** → `https://app.thestorygraph.com`
+   - **Firefox:** **Storage** tab → **Cookies** → `https://app.thestorygraph.com`
+4. Find these two rows and copy the text in their **Value** column (double-click the value to select it):
+   - `_storygraph_session`
+   - `remember_user_token`
+
+   If you don't see `remember_user_token`, log out of StoryGraph, then log back in with **Remember me** ticked.
+
+**Step 2: Find `config.ini` on your Kobo**
+
+1. On the Kobo, open any book, tap the StoryGraph icon, and choose **Sync now**. The plugin creates `config.ini` the first time it runs. You'll see a "Please set session_cookie" error; that's expected for now.
+2. Connect the Kobo to your computer via USB and open `.adds/NickelStorygraph/`. You need hidden files visible to see `.adds`, the same as for `.kobo` during installation.
+3. Open `config.ini` in a plain text editor (Notepad, TextEdit, VS Code). Don't use Word.
+
+> **Windows users:** File Explorer hides file extensions by default, so `config.ini` shows up as just **`config`**. That *is* the right file. Don't create a new file called `config.ini`: Windows will save it as `config.ini.txt` and the plugin will ignore it. To see real file names, turn on **View → Show → File name extensions** in File Explorer.
+
+**Step 3: Fill in your login details**
+
+At the top of `config.ini` you'll see these lines:
 
 ```ini
-; Obtain from browser DevTools → Application → Cookies → app.thestorygraph.com
-session_cookie = <value of _storygraph_session>
-remember_user_token = <value of remember_user_token>
+; session_cookie =
+; remember_user_token =
+; user_slug = yourname
+```
 
-; Optional — avoids a homepage request on every sync
+The `;` at the start of a line makes the plugin ignore it. For each of the three lines mentioned above, **delete the `;` and the space after it** so the line starts with the setting name. Then paste your values after the `=`:
+
+```ini
+session_cookie = paste-your-_storygraph_session-value-here
+remember_user_token = paste-your-remember_user_token-value-here
 user_slug = yourname
 ```
 
-To get your cookies, log in to StoryGraph in a browser, open DevTools (`F12`), go to **Application → Storage → Cookies → `https://app.thestorygraph.com`**, and copy the values for `_storygraph_session` and `remember_user_token`.
+- `user_slug` is optional. It's the part of your StoryGraph profile URL after `/users/`. Setting it makes syncing slightly faster.
+- Paste the values without quotes, and make sure each one stays on a single line.
 
-Session cookies expire periodically. If syncing stops working, update these values in `config.ini` with fresh cookies from your browser.
+**Step 4: Save and eject**
+
+Save the file, safely eject the Kobo, and open a book. Tap the StoryGraph icon and choose **Sync now** to check it worked.
+
+**Common mistakes**
+
+| Symptom | Cause |
+|---|---|
+| "Please set session_cookie" after editing | The line still starts with `;`, or you edited `config_example.ini` or a `config.ini.txt` instead of `config.ini` |
+| Two files named `config` and `config.ini` in the folder | The one shown as `config` is the real `config.ini`. Delete the one you created and edit the original |
+| Worked before, now says the session has expired | Your cookies expired. Repeat Steps 1 and 3 with fresh values |
 
 ### Key options
 
@@ -146,10 +194,10 @@ Open any book and tap the StoryGraph icon in the reading toolbar at the top of t
 - **Book management**
   - **Manually link book** / **Unlink book** — Search StoryGraph to link this book to a specific edition, or clear the link
   - **Sync edition from web** — Re-checks your StoryGraph currently-reading shelf and updates the linked edition if you changed it on the website
-- **Update book status** — Set your reading status (Want to Read, Currently Reading, Paused, Read, Did Not Finish)
+- **Update book status** — Set your reading status (Want to Read, Currently Reading, Paused, Read, Did Not Finish), and mark the book private or public with **Private: Yes / No**
 - **Open reading journal** — Browse journal entries and add new ones
 - **Write a review** — Rate and review the book
-- **Settings** — Configure sync behaviour, credentials, and other options
+- **Settings** — Configure sync behaviour and other options (login cookies can only be set in `config.ini`)
 
 ### Home screen menu
 
@@ -173,10 +221,13 @@ If a book can't be found automatically, a prompt appears to link it manually. Us
 ## Troubleshooting
 
 **The StoryGraph icon doesn't appear when I open a book.**
-The plugin may not have installed correctly. Reconnect the Kobo via USB and confirm that `.adds/NickelStorygraph/nickelstoregraph.so` exists on the device. If the file is missing, repeat the installation steps.
+The plugin may not have installed correctly. Reconnect the Kobo via USB and confirm that the `.adds/NickelStorygraph/` folder exists and contains the `cli` file. If it's missing, repeat the installation steps.
 
-**Syncing does nothing / I get an error about credentials.**
-Your session cookies have expired. Log back in to StoryGraph in a browser, copy fresh values for `_storygraph_session` and `remember_user_token`, and update `config.ini`.
+**I get "Please set session_cookie" even though I added my cookies.**
+See [Common mistakes](#logging-in-to-storygraph) under Logging in. The usual causes are that the line still starts with `;`, or the values went into the wrong file (`config_example.ini`, or a `config.ini.txt` that Windows created). Reinstalling the plugin won't fix this.
+
+**Syncing used to work but now I get an error about my session or credentials.**
+Your session cookies have expired. Log back in to StoryGraph in a browser, copy fresh values for `_storygraph_session` and `remember_user_token`, and update `config.ini` ([Logging in](#logging-in-to-storygraph), Steps 1 and 3).
 
 **A book can't be found or links to the wrong edition.**
 Use **Book management → Manually link book** to search for the correct edition and link it. Once linked, all future syncs use that edition directly.
@@ -218,6 +269,7 @@ NickelStorygraph has two components that communicate via subprocess calls and JS
 
 - **Hook** (`hook/`) — A Qt5/C++ plugin that injects into Kobo's Nickel UI. Handles all UI rendering, menu items, dialogs, and user input. Spawns the CLI as a child process and reads its JSON output.
 - **CLI** (`cli/`) — A Rust binary cross-compiled for ARM Linux. Contains all business logic: StoryGraph web scraping (session auth, progress updates, journal, reviews, search), Kobo SQLite queries for reading position and annotations, ISBN extraction from EPUB metadata, and edition resolution.
+
 
 ## Acknowledgements
 

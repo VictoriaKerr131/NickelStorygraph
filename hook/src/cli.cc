@@ -67,6 +67,12 @@ CLI *CLI::setUserBook(int status, Options options) {
   return new CLI(arguments, options);
 }
 
+CLI *CLI::setPrivacy(bool isPrivate, Options options) {
+  QStringList arguments = {"set-user-book", isPrivate ? "--private" : "--public"};
+  arguments.append(getIdentifier(options));
+  return new CLI(arguments, options);
+}
+
 CLI *CLI::setUserBook(float rating, QString text, QList<int> moods,
                        QString pace, QString characterOrPlotDriven,
                        QString strongCharacterDev, QString loveableCharacters,

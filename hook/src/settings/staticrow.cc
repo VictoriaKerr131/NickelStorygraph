@@ -1,7 +1,7 @@
 ﻿#include <QHBoxLayout>
 
 #include "../files.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/label.h"
 #include "staticrow.h"
 

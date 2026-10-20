@@ -6,7 +6,7 @@
 #include <NickelHook.h>
 
 #include "../cli.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/elidedlabel.h"
 #include "annotationsdialog.h"
 #include "annotationsrow.h"

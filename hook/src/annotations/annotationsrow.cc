@@ -3,7 +3,7 @@
 #include <QTimer>
 
 #include "../cli.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../search/searchdialog.h"
 #include "../settings.h"
 #include "../widgets/elidedlabel.h"

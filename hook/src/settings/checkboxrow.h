@@ -4,7 +4,7 @@
 #include <QVariant>
 #include <QWidget>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/label.h"
 
 class CheckboxRow : public QWidget {

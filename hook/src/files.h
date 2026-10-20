@@ -15,39 +15,40 @@ constexpr char const *nickelmenu_config_entry = "/mnt/onboard/.adds/nm/storygrap
 constexpr char const *arrow_backward = ":/images/reading/global_backward.png";
 constexpr char const *arrow_down = ":/images/widgets/settings_date_time_down.png";
 constexpr char const *arrow_forward = ":/images/reading/global_forward.png";
-constexpr char const *arrow_left = ":/nickelstoregraph/arrow_left.png";
+constexpr char const *arrow_left = ":/nickelstorygraph/arrow_left.png";
 constexpr char const *arrow_menu = ":/images/menu/settings_menu_arrow.png";
 constexpr char const *arrow_right = ":/images/menu/label_arrow_right.png";
 constexpr char const *arrow_up = ":/images/widgets/settings_date_time_up.png";
-constexpr char const *clear = ":/nickelstoregraph/clear.png";
-constexpr char const *icon = ":/nickelstoregraph/icon.png";
-constexpr char const *icon_hit = ":/nickelstoregraph/icon_hit.png";
-constexpr char const *icon_hit_dark = ":/nickelstoregraph/icon_hit_dark.png";
-constexpr char const *icon_outline = ":/nickelstoregraph/icon_outline.png"; // currently unused, kept for future use
+constexpr char const *clear = ":/nickelstorygraph/clear.png";
+constexpr char const *icon = ":/nickelstorygraph/icon.png";
+constexpr char const *icon_hit = ":/nickelstorygraph/icon_hit.png";
+constexpr char const *icon_hit_dark = ":/nickelstorygraph/icon_hit_dark.png";
+constexpr char const *icon_outline = ":/nickelstorygraph/icon_outline.png"; // currently unused, kept for future use
 // High-res source for the home screen tab bar icon, scaled at runtime to
 // match Nickel's own native tab icon size - see scaledNavIconPath() in
-// nickelstoregraph.cc. nav_icon/nav_icon_hit below are the static fallback
+// nickelstorygraph.cc. nav_icon/nav_icon_hit below are the static fallback
 // used only if that runtime scaling fails.
-constexpr char const *icon_master_outline = ":/nickelstoregraph/icon-master-outline.png";
-constexpr char const *nav_icon = ":/nickelstoregraph/nav_icon.png";
-constexpr char const *nav_icon_hit = ":/nickelstoregraph/nav_icon_hit.png";
-constexpr char const *left_star = ":/nickelstoregraph/left_star.png";
-constexpr char const *left_star_hit = ":/nickelstoregraph/left_star_hit.png";
-constexpr char const *loading = ":/nickelstoregraph/loading.png";
-constexpr char const *right_star = ":/nickelstoregraph/right_star.png";
-constexpr char const *right_star_hit = ":/nickelstoregraph/right_star_hit.png";
+constexpr char const *icon_master_outline = ":/nickelstorygraph/icon-master-outline.png";
+constexpr char const *nav_icon = ":/nickelstorygraph/nav_icon.png";
+constexpr char const *nav_icon_hit = ":/nickelstorygraph/nav_icon_hit.png";
+constexpr char const *left_star = ":/nickelstorygraph/left_star.png";
+constexpr char const *left_star_hit = ":/nickelstorygraph/left_star_hit.png";
+constexpr char const *loading = ":/nickelstorygraph/loading.png";
+constexpr char const *right_star = ":/nickelstorygraph/right_star.png";
+constexpr char const *right_star_hit = ":/nickelstorygraph/right_star_hit.png";
 constexpr char const *wifi = ":/images/statusbar/wifi05.png";
 
-constexpr char const *list_book = ":/nickelstoregraph/list_book.png";
-constexpr char const *note = ":/nickelstoregraph/note.png";
-constexpr char const *progress_updated = ":/nickelstoregraph/progress_updated.png";
-constexpr char const *prompt_book = ":/nickelstoregraph/prompt_book.png";
-constexpr char const *quote = ":/nickelstoregraph/quote.png";
-constexpr char const *rated = ":/nickelstoregraph/rated.png";
-constexpr char const *reviewed = ":/nickelstoregraph/reviewed.png";
-constexpr char const *status_read = ":/nickelstoregraph/status_read.png";
-constexpr char const *status_stopped = ":/nickelstoregraph/status_stopped.png";
-constexpr char const *status_want_to_read = ":/nickelstoregraph/status_want_to_read.png";
-constexpr char const *user_book_read_finished = ":/nickelstoregraph/user_book_read_finished.png";
-constexpr char const *user_book_read_started = ":/nickelstoregraph/user_book_read_started.png";
+constexpr char const *list_book = ":/nickelstorygraph/list_book.png";
+constexpr char const *note = ":/nickelstorygraph/note.png";
+constexpr char const *private_book = ":/nickelstorygraph/private.png";
+constexpr char const *progress_updated =":/nickelstorygraph/progress_updated.png";
+constexpr char const *prompt_book = ":/nickelstorygraph/prompt_book.png";
+constexpr char const *quote = ":/nickelstorygraph/quote.png";
+constexpr char const *rated = ":/nickelstorygraph/rated.png";
+constexpr char const *reviewed = ":/nickelstorygraph/reviewed.png";
+constexpr char const *status_read = ":/nickelstorygraph/status_read.png";
+constexpr char const *status_stopped = ":/nickelstorygraph/status_stopped.png";
+constexpr char const *status_want_to_read = ":/nickelstorygraph/status_want_to_read.png";
+constexpr char const *user_book_read_finished = ":/nickelstorygraph/user_book_read_finished.png";
+constexpr char const *user_book_read_started = ":/nickelstorygraph/user_book_read_started.png";
 } // namespace Files

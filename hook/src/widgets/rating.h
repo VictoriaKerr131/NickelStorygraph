@@ -3,7 +3,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 
 class Rating : public QWidget {
   Q_OBJECT

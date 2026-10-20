@@ -6,7 +6,7 @@
 
 #include <NickelHook.h>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "homepanel.h"
 
 HomePanel::HomePanel(QString title) : QFrame() {

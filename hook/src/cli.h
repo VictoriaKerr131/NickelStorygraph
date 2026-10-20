@@ -32,6 +32,7 @@ public:
   static CLI *getUser(Options options = Options());
   static CLI *getUserBook(Options options = Options());
   static CLI *setUserBook(int status, Options options = Options());
+  static CLI *setPrivacy(bool isPrivate, Options options = Options());
   static CLI *setUserBook(float rating, QString text, QList<int> moods,
                            QString pace, QString characterOrPlotDriven,
                            QString strongCharacterDev, QString loveableCharacters,

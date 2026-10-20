@@ -2,7 +2,7 @@
 
 #include <QJsonArray>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/dialog.h"
 #include "../widgets/pagedstack.h"
 

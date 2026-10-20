@@ -2,7 +2,7 @@
 #include <QHBoxLayout>
 #include <QStyle>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/label.h"
 #include "buttongroup.h"
 

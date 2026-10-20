@@ -101,8 +101,9 @@ FeedRow::FeedRow(QJsonObject json, QWidget *parent) : QFrame(parent) {
   info->setContentsMargins(0, 0, 0, 0);
   info->setSpacing(3);
 
-  // Title — large and bold
+  // Title — large and bold. Wrap instead of cutting off long titles.
   Label *titleLabel = new Label(Label::Large, bookTitle);
+  titleLabel->setWordWrap(true);
   titleLabel->setStyleSheet(Label::Stylesheet + QStringLiteral("\n[textSize=\"Large\"] { font-weight: bold; }"));
   info->addWidget(titleLabel);
 

@@ -9,7 +9,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "../widgets/dialog.h"
 #include "../widgets/rating.h"
 

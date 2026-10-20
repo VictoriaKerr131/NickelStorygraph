@@ -22,6 +22,14 @@ pub struct SetUserBook {
   #[argh(option)]
   pub status: Option<u8>,
 
+  /// make the book private on StoryGraph
+  #[argh(switch)]
+  pub private: bool,
+
+  /// make the book public on StoryGraph
+  #[argh(switch)]
+  pub public: bool,
+
   /// star rating (0.0–5.0, quarter-star increments)
   #[argh(option)]
   pub rating: Option<f32>,
@@ -73,7 +81,10 @@ pub fn run(args: SetUserBook) -> Result<()> {
     book_not_found("No ISBN found. Please link book manually.")
   };
 
-  if let Some(status_id) = args.status {
+  if args.private || args.public {
+    let user_book = storygraph::set_privacy(&book_id, args.private)?;
+    log!("BEGIN_JSON\n{}", serde_json::to_string(&user_book)?);
+  } else if let Some(status_id) = args.status {
     let user_book = storygraph::update_status(&book_id, status_id)?;
     log!("BEGIN_JSON\n{}", serde_json::to_string(&user_book)?);
   } else {

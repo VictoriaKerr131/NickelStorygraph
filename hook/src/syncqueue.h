@@ -5,7 +5,7 @@
 #include <QObject>
 #include <QSettings>
 
-#include "nickelstoregraph.h"
+#include "nickelstorygraph.h"
 
 class SyncQueue : public QObject {
   Q_OBJECT
