@@ -6,7 +6,7 @@
 #include <NickelHook.h>
 
 #include "../files.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "label.h"
 #include "pagedstack.h"
 

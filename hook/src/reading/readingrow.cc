@@ -78,17 +78,33 @@ ReadingRow::ReadingRow(QJsonObject json, QWidget *parent) : QFrame(parent) {
   text->setSpacing(2);
 
   // Title — large and bold, matching the goals page category name weight.
-  // Wrap instead of cutting off long titles; the row height estimate in
-  // ReadingDialog::fillPages() accounts for up to two lines here.
+  // Wrap instead of cutting off long titles; ReadingDialog::fillPages() pages
+  // at a fixed 4 rows so there's room for two lines here.
   Label *titleLabel = new Label(Label::Large, title);
   titleLabel->setWordWrap(true);
   titleLabel->setStyleSheet(Label::Stylesheet + QStringLiteral("\n[textSize=\"Large\"] { font-weight: bold; }"));
   text->addWidget(titleLabel);
 
-  // Author — small, muted
+  // Author — small, muted. Private books get StoryGraph's eye-slash icon at the
+  // end of this line, so the row doesn't grow taller.
   Label *authorLabel = new Label(Label::Small, author);
   authorLabel->setObjectName("author");
-  text->addWidget(authorLabel);
+  if (json.value("is_private").toBool(false)) {
+    QHBoxLayout *authorRow = new QHBoxLayout();
+    authorRow->setContentsMargins(0, 0, 0, 0);
+    authorRow->setSpacing(6);
+    authorRow->addWidget(authorLabel, 1);
+
+    authorLabel->ensurePolished();
+    int iconSize = authorLabel->fontMetrics().height();
+    QLabel *privateIcon = new QLabel(this);
+    privateIcon->setPixmap(QPixmap(Files::private_book).scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    authorRow->addWidget(privateIcon, 0, Qt::AlignVCenter);
+
+    text->addLayout(authorRow);
+  } else {
+    text->addWidget(authorLabel);
+  }
 
   // Meta line (pages • format • year) — extra-small, very muted
   QStringList meta;

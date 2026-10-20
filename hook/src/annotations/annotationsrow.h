@@ -3,7 +3,7 @@
 #include <QFrame>
 #include <QJsonObject>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 
 class AnnotationsRow : public QFrame {
   Q_OBJECT

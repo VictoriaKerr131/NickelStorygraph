@@ -49,7 +49,7 @@ pub fn write_logfile() {
       .as_path()
       .parent()
       .context("Failed to get current binary directory")?
-      .join("nickelstoregraph.log");
+      .join("nickelstorygraph.log");
 
     let mut file = OpenOptions::new()
       .create(true)

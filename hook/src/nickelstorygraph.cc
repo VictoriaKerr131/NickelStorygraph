@@ -376,7 +376,7 @@ QString scaledNavIconPath() {
   nh_log("scaledNavIconPath: scaled master to match native icon (%dx%d): %dx%d", reference.width(),
          reference.height(), scaled.width(), scaled.height());
 
-  QString tempOut = QStringLiteral("/tmp/nickelstoregraph_nav_icon.png");
+  QString tempOut = QStringLiteral("/tmp/nickelstorygraph_nav_icon.png");
   if (!scaled.save(tempOut, "PNG")) {
     nh_log("scaledNavIconPath: could not save scaled icon to %s", qPrintable(tempOut));
     return QString();
@@ -442,14 +442,14 @@ void showStorygraphHomeMenu(QWidget *anchor) {
   menu->popup(pos);
 }
 
-int nickelstoregraph_init() {
+int nickelstorygraph_init() {
   void *nmHandle = dlopen("/usr/local/Kobo/imageformats/libnm.so", RTLD_NOLOAD | RTLD_LAZY);
   if (nmHandle) {
     nmMenuHook2 = reinterpret_cast<NmMenuHook2>(dlsym(nmHandle, "_nm_menu_hook2"));
     dlclose(nmHandle);
   }
   nickelMenuDetected = nmMenuHook2 != nullptr;
-  nh_log("nickelstoregraph_init: nickelMenuDetected=%s", nickelMenuDetected ? "true" : "false");
+  nh_log("nickelstorygraph_init: nickelMenuDetected=%s", nickelMenuDetected ? "true" : "false");
 
   void *hcHandle = dlopen("/usr/local/Kobo/imageformats/libhardcover.so", RTLD_NOLOAD | RTLD_LAZY);
   if (hcHandle) {
@@ -460,13 +460,13 @@ int nickelstoregraph_init() {
         reinterpret_cast<HcReadingMenuViewConstructor2>(dlsym(hcHandle, "_nh_ReadingMenuView__constructor_2"));
     dlclose(hcHandle);
   }
-  nh_log("nickelstoregraph_init: hcSetVolume=%p hcReadingMenuViewConstructor=%p hcReadingMenuViewConstructor2=%p",
+  nh_log("nickelstorygraph_init: hcSetVolume=%p hcReadingMenuViewConstructor=%p hcReadingMenuViewConstructor2=%p",
          (void *)hcSetVolume, (void *)hcReadingMenuViewConstructor, (void *)hcReadingMenuViewConstructor2);
 
   return 0;
 }
 
-NickelHook(.init = &nickelstoregraph_init, .info = &NickelStorygraph, .hook = NickelStorygraphHook,
+NickelHook(.init = &nickelstorygraph_init, .info = &NickelStorygraph, .hook = NickelStorygraphHook,
            .dlsym = NickelStorygraphDlsym, .uninstall = &hardcover_uninstall);
 
 QStackedWidget *stackedWidget = nullptr;

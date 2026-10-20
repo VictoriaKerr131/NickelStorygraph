@@ -1,10 +1,11 @@
 ﻿#pragma once
 
+#include <QJsonObject>
 #include <QObject>
 #include <QSettings>
 #include <QWidgetAction>
 
-#include "nickelstoregraph.h"
+#include "nickelstorygraph.h"
 
 struct Item {
   QString text;
@@ -30,6 +31,9 @@ public Q_SLOTS:
 
 private:
   void setSelected(bool selected);
+  void setStatus(int status);
+  void togglePrivate();
 
   int iconHeight;
+  bool currentPrivate = false; // from the last get/set-user-book response
 };

@@ -5,7 +5,7 @@
 #include <QWidget>
 
 #include "../menucontroller.h"
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 
 enum MenuRowType {
   Tap,

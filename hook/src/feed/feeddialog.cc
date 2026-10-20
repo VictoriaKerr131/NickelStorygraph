@@ -49,7 +49,10 @@ void FeedDialog::fillPages(const QJsonArray &items) {
   // Feed rows vary in height. Rows with reviews (header + cover + title + author +
   // genres + rating + 3-line review + padding) reach ~180-200px. Use 250 so the
   // page never overflows and clips the bottom of the last row.
+  // Titles wrap, so long ones get a second line's worth of extra room.
   static const int ROW_H  = 230;
+  static const int TITLE_EXTRA_LINE_H = 40;
+  static const int TITLE_WRAP_CHARS = 32; // rough length before a title wraps
   static const int ROW_GAP = 10;
 
   int availableHeight = pages->getAvailableHeight();
@@ -64,8 +67,11 @@ void FeedDialog::fillPages(const QJsonArray &items) {
   bool firstOnPage = true;
 
   for (int i = 0; i < items.size(); i++) {
-    FeedRow *row = new FeedRow(items.at(i).toObject(), pages);
-    int cost = ROW_H + (firstOnPage ? 0 : ROW_GAP);
+    QJsonObject item = items.at(i).toObject();
+    int rowH = ROW_H + (item.value("book_title").toString().length() > TITLE_WRAP_CHARS ? TITLE_EXTRA_LINE_H : 0);
+
+    FeedRow *row = new FeedRow(item, pages);
+    int cost = rowH + (firstOnPage ? 0 : ROW_GAP);
 
     if (!firstOnPage && pageHeight + cost > availableHeight) {
       rows->addStretch(1);
@@ -77,7 +83,7 @@ void FeedDialog::fillPages(const QJsonArray &items) {
       rows->setSpacing(ROW_GAP);
       pageHeight  = 0;
       firstOnPage = true;
-      cost        = ROW_H;
+      cost        = rowH;
     }
 
     if (firstOnPage) row->setProperty("noBorder", QVariant(true));

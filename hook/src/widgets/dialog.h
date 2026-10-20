@@ -2,7 +2,7 @@
 
 #include <QFrame>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 
 class Dialog : public QFrame {
   Q_OBJECT

@@ -5,7 +5,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 
-#include "../nickelstoregraph.h"
+#include "../nickelstorygraph.h"
 #include "qobject.h"
 
 class PagedStack : public QWidget {
