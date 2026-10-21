@@ -251,7 +251,7 @@ void MenuController::triggered(QAction *action) {
     SyncController *ctl = SyncController::getInstance();
 
     if (Settings::getInstance()->getLinkedId(ctl->contentId).isEmpty()) {
-      SearchDialog::show(ctl->contentId, ctl->title + " " + ctl->author);
+      SearchDialog::show(ctl->contentId, CLI::searchQuery(ctl->title, ctl->author));
     } else {
       Settings::getInstance()->clearBookLink(ctl->contentId);
     }

@@ -69,7 +69,7 @@ void AnnotationsRow::tapped() {
   CLI::Options options;
   options.icon = true;
   options.contentId = doc.value("volume_id").toString();
-  options.query = doc.value("title").toString() + " " + doc.value("author").toString();
+  options.query = CLI::searchQuery(doc.value("title").toString(), doc.value("author").toString());
 
   CLI *cli = CLI::updateJournal(options);
   QObject::connect(cli, &CLI::success, this, &AnnotationsRow::success);

@@ -95,3 +95,39 @@ pub fn book_not_found(msg: &str) -> ! {
 
   std::process::exit(0);
 }
+
+/// Removes parenthesised and bracketed segments from a book title, e.g.
+/// "Good Boy (The Northern Weird Project)" -> "Good Boy". Kobo titles often
+/// carry the series that way, and StoryGraph's search returns nothing for the
+/// combined string. Falls back to the trimmed input if nothing would remain.
+pub fn strip_bracketed(title: &str) -> String {
+  let mut out = String::with_capacity(title.len());
+  let mut depth = 0usize;
+  for c in title.chars() {
+    match c {
+      '(' | '[' => depth += 1,
+      ')' | ']' if depth > 0 => depth -= 1,
+      _ if depth == 0 => out.push(c),
+      _ => {}
+    }
+  }
+  let cleaned = out.split_whitespace().join(" ");
+  if cleaned.is_empty() { title.trim().to_owned() } else { cleaned }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn strip_bracketed_removes_series_suffix() {
+    assert_eq!(strip_bracketed("Good Boy (The Northern Weird Project)"), "Good Boy");
+    assert_eq!(strip_bracketed("Titan [Star Trek, #2] Book"), "Titan Book");
+    assert_eq!(strip_bracketed("Plain Title"), "Plain Title");
+  }
+
+  #[test]
+  fn strip_bracketed_keeps_title_that_is_only_brackets() {
+    assert_eq!(strip_bracketed(" (Untitled) "), "(Untitled)");
+  }
+}
