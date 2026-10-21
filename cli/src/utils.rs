@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{LazyLock, Mutex};
@@ -114,6 +116,19 @@ pub fn strip_bracketed(title: &str) -> String {
   let cleaned = out.split_whitespace().join(" ");
   if cleaned.is_empty() { title.trim().to_owned() } else { cleaned }
 }
+
+/// An expected, user-facing error (expired login, Cloudflare check, …). main.rs
+/// shows its message as is instead of "Encountered an unexpected error".
+#[derive(Debug)]
+pub struct UserError(pub String);
+
+impl fmt::Display for UserError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(&self.0)
+  }
+}
+
+impl Error for UserError {}
 
 #[cfg(test)]
 mod tests {
