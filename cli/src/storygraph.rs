@@ -878,7 +878,7 @@ pub fn list_reading() -> Result<Vec<ReadingBook>> {
 }
 
 /// Returns the logged-in user's slug. Uses `user_slug` from config if set,
-/// otherwise scrapes the homepage nav for a `/users/` profile link.
+/// otherwise scrapes the homepage nav for the profile link.
 pub fn get_user() -> Result<User> {
   assert_credentials();
 
@@ -887,20 +887,23 @@ pub fn get_user() -> Result<User> {
   }
 
   let html = get("/")?;
-  let doc = Html::parse_document(&html);
-
-  // The nav has a link to the user's profile: /users/:slug
-  let sel = Selector::parse(r#"a[href^="/users/"]"#).expect("valid selector");
-  let slug = doc
-    .select(&sel)
-    .filter_map(|el| el.value().attr("href"))
-    .filter(|href| !href.contains("/sign_in") && !href.contains("/sign_up"))
-    .filter_map(|href| href.strip_prefix("/users/"))
-    .map(str::to_owned)
-    .next()
-    .context("Could not find user profile link — session may be expired")?;
+  let slug = profile_slug(&html).context("Could not find user profile link — session may be expired")?;
 
   Ok(User { username: slug.clone(), slug })
+}
+
+/// Finds the user's slug in the homepage nav. StoryGraph links the profile as
+/// /profile/:slug (it used to be /users/:slug, which now only matches sign-in
+/// and account pages); sub-paths like /profile/edit/:slug must not match.
+fn profile_slug(html: &str) -> Option<String> {
+  let doc = Html::parse_document(html);
+  let sel = Selector::parse(r#"a[href^="/profile/"]"#).expect("valid selector");
+  doc
+    .select(&sel)
+    .filter_map(|el| el.value().attr("href"))
+    .filter_map(|href| href.strip_prefix("/profile/"))
+    .map(str::to_owned)
+    .find(|s| !s.is_empty() && !s.contains('/'))
 }
 
 /// Searches StoryGraph by title/author/ISBN and returns matching books.
@@ -1690,4 +1693,28 @@ fn parse_storygraph_date(date_text: &str) -> String {
     }
   }
   date_text.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // Trimmed shape of the homepage nav (synthetic, no real account data).
+  const NAV_FIXTURE: &str = r#"
+    <nav>
+      <a href="/users/sign_in">Sign in</a>
+      <a href="/profile/edit/reader42">Edit profile</a>
+      <a href="/profile/reader42">Profile</a>
+    </nav>"#;
+
+  #[test]
+  fn profile_slug_reads_profile_link() {
+    assert_eq!(profile_slug(NAV_FIXTURE).as_deref(), Some("reader42"));
+  }
+
+  #[test]
+  fn profile_slug_ignores_old_users_links_and_sub_paths() {
+    assert_eq!(profile_slug(r#"<a href="/users/reader42">x</a>"#), None);
+    assert_eq!(profile_slug(r#"<a href="/profile/edit/reader42">x</a>"#), None);
+  }
 }
