@@ -100,6 +100,23 @@ CLI *CLI::setUserBook(float rating, QString text, QList<int> moods,
   return new CLI(arguments, options);
 }
 
+QString CLI::searchQuery(QString title, QString author) {
+  QString stripped;
+  int depth = 0;
+  for (QChar c : title) {
+    if (c == '(' || c == '[')
+      depth++;
+    else if ((c == ')' || c == ']') && depth > 0)
+      depth--;
+    else if (depth == 0)
+      stripped.append(c);
+  }
+  stripped = stripped.simplified();
+  if (stripped.isEmpty())
+    stripped = title.trimmed();
+  return (stripped + " " + author).trimmed();
+}
+
 CLI *CLI::search(QString query, int limit, int page, Options options) {
   return new CLI({"search", "--limit", QString::number(limit), "--page", QString::number(page), "--query", query},
                  options);
@@ -294,7 +311,7 @@ void CLI::linkBook() {
   QString contentId = options.contentId.isEmpty() ? ctl->contentId : options.contentId;
 
   if (Settings::getInstance()->getLinkedId(contentId).isEmpty()) {
-    SearchDialog::show(contentId, options.query.isEmpty() ? ctl->title + " " + ctl->author : options.query);
+    SearchDialog::show(contentId, options.query.isEmpty() ? CLI::searchQuery(ctl->title, ctl->author) : options.query);
   } else {
     Settings::getInstance()->clearBookLink(contentId);
   }

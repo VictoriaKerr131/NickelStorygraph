@@ -20,6 +20,10 @@ public:
     Options() {};
   };
 
+  // Default search text for a book: title (without a "(Series)"/"[...]"
+  // suffix, which makes StoryGraph's search return nothing) plus author.
+  static QString searchQuery(QString title, QString author);
+
   static CLI *getFeed(Options options = Options());
   static CLI *getGoals(Options options = Options());
   static CLI *getStreak(Options options = Options());

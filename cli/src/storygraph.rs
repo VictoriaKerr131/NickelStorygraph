@@ -23,6 +23,7 @@ use std::sync::Arc;
 
 use crate::config::CONFIG;
 use crate::debug_log;
+use crate::utils::UserError;
 
 pub const BASE_URL: &str = "https://app.thestorygraph.com";
 
@@ -144,12 +145,46 @@ fn assert_credentials() {
   );
 }
 
+fn session_expired() -> anyhow::Error {
+  UserError(
+    "StoryGraph session has expired. Please update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>."
+      .to_owned(),
+  )
+  .into()
+}
+
+/// Cloudflare serves its bot challenge as a 403 HTML page ("Just a moment...").
+/// Without this check that page surfaced as an unexpected "returned error
+/// status", although the usual cause is stale cookies.
+fn is_cloudflare_challenge(status: StatusCode, body: &str) -> bool {
+  status == StatusCode::FORBIDDEN
+    && (body.contains("Just a moment") || body.contains("cf_chl") || body.contains("challenge-platform"))
+}
+
+/// Turns a Cloudflare challenge into an actionable error; other responses are
+/// passed through. Consumes the body only for a 403.
+fn check_blocked(res: Response, context: &str) -> Result<Response> {
+  let status = res.status();
+  if status != StatusCode::FORBIDDEN {
+    return Ok(res);
+  }
+  let body = res.text().unwrap_or_default();
+  if is_cloudflare_challenge(status, &body) {
+    return Err(
+      UserError(
+        "StoryGraph blocked the request with a Cloudflare bot check (HTTP 403).<br><br>If syncing stopped working, your cookies have probably expired: log in to StoryGraph in a browser and update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>. If they are fresh, wait a few minutes and try again."
+          .to_owned(),
+      )
+      .into(),
+    );
+  }
+  bail!("{context} returned error status: 403 Forbidden")
+}
+
 /// Returns Err if the final response URL ended up on the sign-in page.
 fn check_session(response: &Response) -> Result<()> {
   if response.url().path().contains("/users/sign_in") {
-    bail!(
-      "StoryGraph session has expired. Please update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>."
-    );
+    return Err(session_expired());
   }
   Ok(())
 }
@@ -166,6 +201,7 @@ fn get(path: &str) -> Result<String> {
   .map_err(|e| e.error)?;
 
   check_session(&res)?;
+  let res = check_blocked(res, &format!("GET {url}"))?;
   res.error_for_status_ref().context(format!("GET {url} returned error status"))?;
   res.text().context(format!("Failed to read body from GET {url}"))
 }
@@ -191,14 +227,13 @@ fn post_form_browser(path: &str, fields: &[(String, String)]) -> Result<String> 
   if res.status() == StatusCode::FOUND {
     let location = res.headers().get("location").and_then(|v| v.to_str().ok()).unwrap_or("");
     if location.contains("/users/sign_in") {
-      bail!(
-        "StoryGraph session has expired. Please update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>."
-      );
+      return Err(session_expired());
     }
     return Ok(String::new());
   }
 
   check_session(&res)?;
+  let res = check_blocked(res, &format!("POST {url}"))?;
   res.error_for_status_ref().context(format!("POST {url} returned error status"))?;
   res.text().context(format!("Failed to read body from POST {url}"))
 }
@@ -227,14 +262,13 @@ fn post_form(path: &str, fields: &[(&str, &str)]) -> Result<String> {
   if res.status() == StatusCode::FOUND {
     let location = res.headers().get("location").and_then(|v| v.to_str().ok()).unwrap_or("");
     if location.contains("/users/sign_in") {
-      bail!(
-        "StoryGraph session has expired. Please update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>."
-      );
+      return Err(session_expired());
     }
     return Ok(String::new());
   }
 
   check_session(&res)?;
+  let res = check_blocked(res, &format!("POST {url}"))?;
   res.error_for_status_ref().context(format!("POST {url} returned error status"))?;
   res.text().context(format!("Failed to read body from POST {url}"))
 }
@@ -878,7 +912,7 @@ pub fn list_reading() -> Result<Vec<ReadingBook>> {
 }
 
 /// Returns the logged-in user's slug. Uses `user_slug` from config if set,
-/// otherwise scrapes the homepage nav for a `/users/` profile link.
+/// otherwise scrapes the homepage nav for the profile link.
 pub fn get_user() -> Result<User> {
   assert_credentials();
 
@@ -887,20 +921,23 @@ pub fn get_user() -> Result<User> {
   }
 
   let html = get("/")?;
-  let doc = Html::parse_document(&html);
-
-  // The nav has a link to the user's profile: /users/:slug
-  let sel = Selector::parse(r#"a[href^="/users/"]"#).expect("valid selector");
-  let slug = doc
-    .select(&sel)
-    .filter_map(|el| el.value().attr("href"))
-    .filter(|href| !href.contains("/sign_in") && !href.contains("/sign_up"))
-    .filter_map(|href| href.strip_prefix("/users/"))
-    .map(str::to_owned)
-    .next()
-    .context("Could not find user profile link — session may be expired")?;
+  let slug = profile_slug(&html).context("Could not find user profile link — session may be expired")?;
 
   Ok(User { username: slug.clone(), slug })
+}
+
+/// Finds the user's slug in the homepage nav. StoryGraph links the profile as
+/// /profile/:slug (it used to be /users/:slug, which now only matches sign-in
+/// and account pages); sub-paths like /profile/edit/:slug must not match.
+fn profile_slug(html: &str) -> Option<String> {
+  let doc = Html::parse_document(html);
+  let sel = Selector::parse(r#"a[href^="/profile/"]"#).expect("valid selector");
+  doc
+    .select(&sel)
+    .filter_map(|el| el.value().attr("href"))
+    .filter_map(|href| href.strip_prefix("/profile/"))
+    .map(str::to_owned)
+    .find(|s| !s.is_empty() && !s.contains('/'))
 }
 
 /// Searches StoryGraph by title/author/ISBN and returns matching books.
@@ -1066,7 +1103,7 @@ pub fn set_privacy(book_id: &str, private: bool) -> Result<UserBook> {
   assert_credentials();
   let html = get(&format!("/books/{book_id}"))?;
   let Some(toggle) = privacy_toggle(&Html::parse_document(&html)) else {
-    bail!("This book has no privacy option on StoryGraph. Set a status for it first.");
+    return Err(UserError("This book has no privacy option on StoryGraph. Set a status for it first.".to_owned()).into());
   };
 
   if toggle.is_private == private {
@@ -1565,18 +1602,7 @@ pub fn list_journal(book_id: &str, limit: usize, offset: usize) -> Result<Vec<Jo
 
     // Status badge ("Started reading", "Want to read", etc.)
     if let Some(badge) = el.select(&badge_sel).next() {
-      let title = badge.value().attr("title").unwrap_or("").to_lowercase();
-      let event = if title.contains("start") {
-        "user_book_read_started"
-      } else if title.contains("finish") {
-        "user_book_read_finished"
-      } else if title.contains("want to read") {
-        "status_want_to_read"
-      } else if title.contains("stop") || title.contains("dnf") || title.contains("did not finish") {
-        "status_stopped"
-      } else {
-        "status_read"
-      };
+      let event = badge_event(badge.value().attr("title").unwrap_or(""));
       activities.push(JournalActivity {
         event: event.to_owned(),
         action_at,
@@ -1690,4 +1716,69 @@ fn parse_storygraph_date(date_text: &str) -> String {
     }
   }
   date_text.to_owned()
+}
+
+/// Maps a journal status badge's title to the event the hook renders.
+/// "Paused reading of book" / "Resumed reading of book" used to fall through
+/// to "status_read" and showed up as "Marked as Read".
+fn badge_event(title: &str) -> &'static str {
+  let title = title.to_lowercase();
+  if title.contains("start") {
+    "user_book_read_started"
+  } else if title.contains("finish") && !title.contains("did not finish") {
+    "user_book_read_finished"
+  } else if title.contains("want to read") {
+    "status_want_to_read"
+  } else if title.contains("stop") || title.contains("dnf") || title.contains("did not finish") {
+    "status_stopped"
+  } else if title.contains("paused") {
+    "status_paused"
+  } else if title.contains("resumed") {
+    "status_resumed"
+  } else {
+    "status_read"
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn cloudflare_challenge_is_detected_only_on_403() {
+    let page = "<title>Just a moment...</title>";
+    assert!(is_cloudflare_challenge(StatusCode::FORBIDDEN, page));
+    assert!(!is_cloudflare_challenge(StatusCode::OK, page));
+    assert!(!is_cloudflare_challenge(StatusCode::FORBIDDEN, "plain forbidden"));
+  }
+
+  #[test]
+  fn badge_event_maps_journal_badges() {
+    assert_eq!(badge_event("Starting reading this book"), "user_book_read_started");
+    assert_eq!(badge_event("Finished reading"), "user_book_read_finished");
+    assert_eq!(badge_event("Want to read"), "status_want_to_read");
+    assert_eq!(badge_event("Did not finish"), "status_stopped");
+    assert_eq!(badge_event("Paused reading of book"), "status_paused");
+    assert_eq!(badge_event("Resumed reading of book"), "status_resumed");
+    assert_eq!(badge_event("Read"), "status_read");
+  }
+
+  // Trimmed shape of the homepage nav (synthetic, no real account data).
+  const NAV_FIXTURE: &str = r#"
+    <nav>
+      <a href="/users/sign_in">Sign in</a>
+      <a href="/profile/edit/reader42">Edit profile</a>
+      <a href="/profile/reader42">Profile</a>
+    </nav>"#;
+
+  #[test]
+  fn profile_slug_reads_profile_link() {
+    assert_eq!(profile_slug(NAV_FIXTURE).as_deref(), Some("reader42"));
+  }
+
+  #[test]
+  fn profile_slug_ignores_old_users_links_and_sub_paths() {
+    assert_eq!(profile_slug(r#"<a href="/users/reader42">x</a>"#), None);
+    assert_eq!(profile_slug(r#"<a href="/profile/edit/reader42">x</a>"#), None);
+  }
 }

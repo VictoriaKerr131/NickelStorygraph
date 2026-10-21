@@ -6,7 +6,7 @@ use serde_json::json;
 use crate::config::CONFIG;
 use crate::log;
 use crate::storygraph::{self, Book, title_match_score};
-use crate::utils::{VERSION, book_not_found, normalize_identifiers};
+use crate::utils::{VERSION, book_not_found, normalize_identifiers, strip_bracketed};
 
 /// Update reading progress for a book.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -65,8 +65,11 @@ pub fn run(args: Update) -> Result<()> {
       })
       .or_else(|| {
         let (title, author) = meta.as_ref()?;
+        // Kobo titles often carry the series in parentheses, which makes
+        // StoryGraph's search return nothing.
+        let title = strip_bracketed(title);
         let results = storygraph::search(&format!("{title} {author}")).ok()?;
-        best_title_match(results, title)
+        best_title_match(results, &title)
       });
 
     let initial_id = match found {
