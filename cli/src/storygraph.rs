@@ -1568,18 +1568,7 @@ pub fn list_journal(book_id: &str, limit: usize, offset: usize) -> Result<Vec<Jo
 
     // Status badge ("Started reading", "Want to read", etc.)
     if let Some(badge) = el.select(&badge_sel).next() {
-      let title = badge.value().attr("title").unwrap_or("").to_lowercase();
-      let event = if title.contains("start") {
-        "user_book_read_started"
-      } else if title.contains("finish") {
-        "user_book_read_finished"
-      } else if title.contains("want to read") {
-        "status_want_to_read"
-      } else if title.contains("stop") || title.contains("dnf") || title.contains("did not finish") {
-        "status_stopped"
-      } else {
-        "status_read"
-      };
+      let event = badge_event(badge.value().attr("title").unwrap_or(""));
       activities.push(JournalActivity {
         event: event.to_owned(),
         action_at,
@@ -1695,9 +1684,42 @@ fn parse_storygraph_date(date_text: &str) -> String {
   date_text.to_owned()
 }
 
+/// Maps a journal status badge's title to the event the hook renders.
+/// "Paused reading of book" / "Resumed reading of book" used to fall through
+/// to "status_read" and showed up as "Marked as Read".
+fn badge_event(title: &str) -> &'static str {
+  let title = title.to_lowercase();
+  if title.contains("start") {
+    "user_book_read_started"
+  } else if title.contains("finish") && !title.contains("did not finish") {
+    "user_book_read_finished"
+  } else if title.contains("want to read") {
+    "status_want_to_read"
+  } else if title.contains("stop") || title.contains("dnf") || title.contains("did not finish") {
+    "status_stopped"
+  } else if title.contains("paused") {
+    "status_paused"
+  } else if title.contains("resumed") {
+    "status_resumed"
+  } else {
+    "status_read"
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn badge_event_maps_journal_badges() {
+    assert_eq!(badge_event("Starting reading this book"), "user_book_read_started");
+    assert_eq!(badge_event("Finished reading"), "user_book_read_finished");
+    assert_eq!(badge_event("Want to read"), "status_want_to_read");
+    assert_eq!(badge_event("Did not finish"), "status_stopped");
+    assert_eq!(badge_event("Paused reading of book"), "status_paused");
+    assert_eq!(badge_event("Resumed reading of book"), "status_resumed");
+    assert_eq!(badge_event("Read"), "status_read");
+  }
 
   // Trimmed shape of the homepage nav (synthetic, no real account data).
   const NAV_FIXTURE: &str = r#"
