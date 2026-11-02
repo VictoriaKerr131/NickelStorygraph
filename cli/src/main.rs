@@ -6,7 +6,7 @@ use crate::commands::listeditions;
 use crate::commands::listreading;
 use crate::commands::{getfeed, getgoals, getstreak, getuser, getuserbook, insertjournal, listjournal, search, setuserbook, switchedition, syncedition, update, updatejournal};
 use crate::config::CONFIG;
-use crate::utils::{VERSION, write_logfile};
+use crate::utils::{UserError, VERSION, write_logfile};
 
 mod commands;
 mod storygraph;
@@ -90,6 +90,9 @@ fn main() {
   };
 
   if let Err(e) = res {
+    if let Some(user_error) = e.downcast_ref::<UserError>() {
+      panic!("{}", user_error.0);
+    }
     panic!(
       "Encountered an unexpected error. Please report this.<br><br>{:#}",
       e.chain().join("<br>> ")

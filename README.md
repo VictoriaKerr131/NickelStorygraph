@@ -158,7 +158,7 @@ remember_user_token = paste-your-remember_user_token-value-here
 user_slug = yourname
 ```
 
-- `user_slug` is optional. It's the part of your StoryGraph profile URL after `/users/`. Setting it makes syncing slightly faster.
+- `user_slug` is optional. It's the part of your StoryGraph profile URL after `/profile/`. Setting it makes syncing slightly faster.
 - Paste the values without quotes, and make sure each one stays on a single line.
 
 **Step 4: Save and eject**

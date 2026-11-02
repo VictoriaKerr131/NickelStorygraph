@@ -347,7 +347,13 @@ fn read_sqlite_isbn(content_id: &str) -> Result<Vec<String>> {
       log!("ISBN from database `{}`", isbn.join(", "));
       Ok(isbn)
     }
-    None => book_not_found("Couldn't find an ISBN in the database. Please link book manually."),
+    // Many store books have no ISBN in Nickel's database. Return an empty list
+    // like the EPUB path does, so callers can fall back to a title search
+    // instead of giving up here.
+    None => {
+      log!("no ISBN in the database for `{}`", content_id);
+      Ok(Vec::new())
+    }
   }
 }
 
