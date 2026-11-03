@@ -1,6 +1,6 @@
 set dotenv-load
 
-export VERSION := "0.1.0"
+export VERSION := "1.0.0"
 
 [group('helpers')]
 default:
