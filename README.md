@@ -2,22 +2,19 @@
 
 ## Announcement - Please Read!
 
-Hi Fellow Redditors! It's come to my attention that this project has been shared on both Mobileread and Reddit over the last few weeks and while I'm very happy that others are getting use out of one of my personal pet projects I just want to set some expectations around support and updates. I built this project for myself because I often forget to update my progress on Storygraph and I knew there had to be a way to build an integration despite the lack of public API. 
+> Update 11/16/2026 - The StoryGraph appears to have made a change to their website that blocks apps like this plugin from reaching book information pages. Unfortunately, these pages are currently used for several key aspects of the plugin, most importantly updating reading progress. This change has likely broken all currently released versions of NickelStorygraph.
+> <br><br>
+A key sign that you're experiencing this issue is that the home screen functionality still works as expected, but syncing shows a "Cloudflare bot check" error. **Your cookies are fine; you do not need to replace them.**
+<br><br>
+> I'm currently testing an updated version that gets this information from other StoryGraph pages, and I'll release it once the core functionality is working again, hopefully within the next few days. However, based on my initial analysis, some functionality (such as viewing and switching book editions on your device) may not have an alternative approach at this time. I'll post more updates as I learn more.
 
-At this point I didn't intend for this to be used by the masses, just a few friends who I convinced to come to the Kobo / StoryGraph dark side from Kindle. While all are absolutely welcome to use it in its current state, there may still be some issues and bugs that I haven't come across yet and support for resolution or feature requests etc. will be limited to what I can do in my free time.
-
-> **Note:** This plugin does not currently support Firmware 5.x as Kobo devices are not yet on that version and those are all I have available for testing. I will upgrade the plugin to support later versions if / when Kobo makes the switch. 
-
-Thanks for your understanding! 
-
-Victoria 
-
-<br>
 
 ## About 
 A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygraph.com). Syncs your reading progress automatically, logs highlights and notes as journal entries, and lets you view common StorygGraph features directly from your device.
 
 > **Note:** Wi-Fi is required for all StoryGraph features. Because StoryGraph has no public API, this plugin works by scraping the website directly — it may break if StoryGraph makes changes to their UI.
+
+> **Note:** This plugin does not currently support Firmware 5.x as Kobo devices are not yet on that version and those are all I have available for testing. I will upgrade the plugin to support later versions if / when Kobo makes the switch. 
 
 - [Features](#features)
 - [Screenshots](#screenshots)
@@ -29,6 +26,7 @@ A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygrap
 - [Building - Developer Info](#building---developer-info)
 - [Architecture - Developer Info](#architecture---developer-info)
 - [Acknowledgements](#acknowledgements)
+
 
 ## Features
 
