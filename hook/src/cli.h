@@ -40,7 +40,10 @@ public:
                            Options options = Options());
   static CLI *search(QString query, int limit, int page, Options options = Options());
   static CLI *syncEdition(Options options = Options());
-  static CLI *update(int percentage, Options options = Options());
+  // `reread`: the user agreed to start a reread if the book is finished on
+  // StoryGraph. Without it, a finished book isn't synced and the response has
+  // error_code BOOK_FINISHED (emitted via response(), followed by failure()).
+  static CLI *update(int percentage, Options options = Options(), bool reread = false);
 
 public Q_SLOTS:
   void networkConnected();

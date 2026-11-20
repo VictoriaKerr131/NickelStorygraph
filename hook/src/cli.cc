@@ -111,8 +111,11 @@ CLI *CLI::syncEdition(Options options) {
   return new CLI(arguments, options);
 }
 
-CLI *CLI::update(int percentage, Options options) {
+CLI *CLI::update(int percentage, Options options, bool reread) {
   QStringList arguments = {"update", "--value", QString::number(percentage)};
+  if (reread) {
+    arguments.append("--reread");
+  }
   arguments.append(getIdentifier(options));
 
   return new CLI(arguments, options);
@@ -277,6 +280,14 @@ void CLI::processFinished(int exitCode) {
       dialog->open();
 
       failure();
+      return;
+    }
+
+    // Nothing was synced: the caller reads the response to offer a reread.
+    if (obj.value("error_code").toString() == "BOOK_FINISHED") {
+      response(obj);
+      failure();
+      deleteLater();
       return;
     }
 

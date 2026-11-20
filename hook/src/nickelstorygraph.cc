@@ -481,6 +481,7 @@ _nh_ReadingController__setVolume(ReadingController *_this, Volume *volume, Bookm
   syncController->contentId = Content__getId(volume);
   syncController->title = Content__getTitle(volume);
   syncController->author = Content__getAttribution(volume);
+  syncController->bookOpened();
 
   nh_log("ReadingController::setVolume contentId=%s", qPrintable(syncController->contentId));
 

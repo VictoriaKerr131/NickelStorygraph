@@ -1,12 +1,10 @@
 use anyhow::Result;
 use argh::FromArgs;
-use rusqlite::{Connection, OpenFlags};
 use serde_json::json;
 
-use crate::config::CONFIG;
 use crate::log;
 use crate::storygraph::{self, Book, title_match_score};
-use crate::utils::{VERSION, book_not_found, normalize_identifiers};
+use crate::utils::{VERSION, book_not_found, kobo_title, normalize_identifiers};
 
 /// Update reading progress for a book.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -23,6 +21,10 @@ pub struct Update {
   /// progress percentage (0–100)
   #[argh(option)]
   pub value: u32,
+
+  /// the user agreed to start a reread if the book is finished on StoryGraph
+  #[argh(switch)]
+  pub reread: bool,
 }
 
 pub fn run(args: Update) -> Result<()> {
@@ -30,12 +32,12 @@ pub fn run(args: Update) -> Result<()> {
 
   let content_id = args.content_id.clone();
   let (book_id, isbns) = normalize_identifiers(args.linked_id, content_id.as_deref());
+  let meta = kobo_title(content_id.as_deref());
+  let title = meta.as_ref().map(|(title, _)| title.as_str());
 
   let book_id = if !book_id.is_empty() {
     book_id
   } else {
-    let meta = book_title_query(content_id.as_deref());
-
     // Before doing an ISBN/search lookup, check if the book is already on the user's
     // currently-reading shelf. If so, link to that edition and let the hook ask the
     // user whether to keep StoryGraph's progress or push Kobo's.
@@ -76,7 +78,30 @@ pub fn run(args: Update) -> Result<()> {
     storygraph::prefer_digital_edition(&initial_id)?
   };
 
-  let user_book = storygraph::update_progress(&book_id, "percentage", args.value)?;
+  // Push to whichever edition is actually on the shelf (e.g. an audiobook edition the
+  // user switched to on StoryGraph), so we don't add the Kobo edition as a second entry.
+  // Failing that, to another edition of the work the user has shelved (e.g. to-read).
+  let shelf_id = match storygraph::shelved_edition(&book_id, title)? {
+    Some(id) => id,
+    None => match &meta {
+      Some((title, author)) => storygraph::searched_edition(&book_id, title, author)?.unwrap_or_else(|| book_id.clone()),
+      None => book_id.clone(),
+    },
+  };
+  let user_book = match storygraph::update_progress(&shelf_id, "percentage", args.value, title, args.reread) {
+    Ok(user_book) => user_book,
+    // Finished and no reread requested: tell the hook, which asks the user (or, for an
+    // auto-sync, just remembers the status for the prompt shown when the book is opened).
+    Err(e) if e.is::<storygraph::BookFinished>() => {
+      log!("BEGIN_JSON\n{}", json!({
+        "error_code": "BOOK_FINISHED",
+        "resolved_book_id": book_id,
+        "status_id": 3,
+      }));
+      return Ok(());
+    }
+    Err(e) => return Err(e),
+  };
   let mut resp = serde_json::to_value(&user_book)?;
   resp["resolved_book_id"] = json!(book_id);
   log!("BEGIN_JSON\n{}", resp);
@@ -97,16 +122,4 @@ fn best_title_match(results: Vec<Book>, title: &str) -> Option<Book> {
     })
     .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
     .map(|(book, _)| book)
-}
-
-fn book_title_query(content_id: Option<&str>) -> Option<(String, String)> {
-  let content_id = content_id?;
-  let conn = Connection::open_with_flags(&CONFIG.sqlite_path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
-  conn
-    .query_row(
-      "SELECT Title, Attribution FROM content WHERE ContentID = ? LIMIT 1",
-      [content_id],
-      |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1).unwrap_or_default())),
-    )
-    .ok()
 }

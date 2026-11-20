@@ -51,10 +51,28 @@ void SyncController::currentViewIndexChanged(int index) {
     queue->updateReadProgress(contentId);
 
     QObject::connect(cv, SIGNAL(pageChanged(int)), this, SLOT(pageChanged()), Qt::UniqueConnection);
+
+    // Once per opening, not when returning from a menu or dialog. Uses the saved
+    // status, so it needs no network; a book marked read on the website is only
+    // known to be finished after a sync has seen it.
+    if (checkRereadOnView) {
+      checkRereadOnView = false;
+      if (settings->getAutoSyncDefault() && settings->getStatus(contentId) == 3) {
+        nh_log("Book is finished on StoryGraph, offering a reread");
+        QString id = contentId;
+        QTimer::singleShot(500, this, [this, id]() {
+          if (contentId == id) queue->showRereadPrompt(id);
+        });
+      }
+    }
   }
 
   lastViewName = name;
 }
+
+void SyncController::bookOpened() { checkRereadOnView = true; }
+
+void SyncController::offerReread(bool enableAutoSync) { queue->showRereadPrompt(contentId, enableAutoSync); }
 
 void SyncController::pageChanged() {
   nh_log("SyncController::pageChanged()");

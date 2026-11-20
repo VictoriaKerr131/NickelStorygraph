@@ -76,6 +76,9 @@ GoalsRow::GoalsRow(QJsonObject json, QWidget *parent) : QFrame(parent) {
   progLayout->addWidget(new QLabel(QString::number(percent) + "%"));
   layout->addWidget(progRow);
 
+  // Up to 3 lines: messages like "Amazing! You've exceeded your goal by 52.53
+  // hours!" are often slightly wider than the screen, and on one line the end
+  // was cut off with an ellipsis.
   if (!status.isEmpty())
-    layout->addWidget(new ElidedLabel(Label::Small, status));
+    layout->addWidget(new ElidedLabel(Label::Small, status, 3));
 }
