@@ -8,7 +8,8 @@
 //   session_cookie     → _storygraph_session
 //   remember_user_token → remember_user_token
 
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use anyhow::{Context, Result, bail};
 use reqwest::blocking::{Client, Response};
@@ -23,7 +24,7 @@ use std::sync::Arc;
 
 use crate::config::CONFIG;
 use crate::debug_log;
-use crate::utils::UserError;
+use crate::utils::{UserError, strip_emoji};
 
 pub const BASE_URL: &str = "https://app.thestorygraph.com";
 
@@ -161,6 +162,29 @@ fn is_cloudflare_challenge(status: StatusCode, body: &str) -> bool {
     && (body.contains("Just a moment") || body.contains("cf_chl") || body.contains("challenge-platform"))
 }
 
+/// From Nov 15 to 17 2026, Cloudflare challenged every non-browser request for
+/// `/books/…` pages, whatever the cookies, headers or `cf_clearance`, while the
+/// shelf, search and write endpoints kept working. It was lifted, but in case it
+/// returns: code that can do without a book page checks for this error
+/// (`is_book_page_blocked`) and falls back to the shelf page or search results.
+const BOOK_PAGE_BLOCKED: &str = "StoryGraph is currently blocking apps from opening book pages (Cloudflare bot check, HTTP 403). This may be temporary.<br><br>Syncing still works for books on your <i>Currently Reading</i> shelf. For anything else, please try again later or use the StoryGraph website.";
+
+const REQUEST_BLOCKED: &str = "StoryGraph blocked the request with a Cloudflare bot check (HTTP 403). This may be temporary.<br><br>Please try again later or use the StoryGraph website.";
+
+pub fn is_book_page_blocked(e: &anyhow::Error) -> bool {
+  e.downcast_ref::<UserError>().is_some_and(|u| u.0 == BOOK_PAGE_BLOCKED)
+}
+
+/// Set once a `/books/…` page comes back blocked. For the rest of this CLI run,
+/// `get` fails book pages straight away instead of requesting them again, so a
+/// block costs at most one 403 per action.
+static BOOK_PAGES_BLOCKED: AtomicBool = AtomicBool::new(false);
+
+fn book_page_blocked() -> anyhow::Error {
+  BOOK_PAGES_BLOCKED.store(true, Ordering::Relaxed);
+  UserError(BOOK_PAGE_BLOCKED.to_owned()).into()
+}
+
 /// Turns a Cloudflare challenge into an actionable error; other responses are
 /// passed through. Consumes the body only for a 403.
 fn check_blocked(res: Response, context: &str) -> Result<Response> {
@@ -168,15 +192,13 @@ fn check_blocked(res: Response, context: &str) -> Result<Response> {
   if status != StatusCode::FORBIDDEN {
     return Ok(res);
   }
+  let book_page = res.url().path().starts_with("/books/");
   let body = res.text().unwrap_or_default();
   if is_cloudflare_challenge(status, &body) {
-    return Err(
-      UserError(
-        "StoryGraph blocked the request with a Cloudflare bot check (HTTP 403).<br><br>If syncing stopped working, your cookies have probably expired: log in to StoryGraph in a browser and update <i>session_cookie</i> and <i>remember_user_token</i> in <i>.adds/NickelStorygraph/config.ini</i>. If they are fresh, wait a few minutes and try again."
-          .to_owned(),
-      )
-      .into(),
-    );
+    if book_page {
+      return Err(book_page_blocked());
+    }
+    return Err(UserError(REQUEST_BLOCKED.to_owned()).into());
   }
   bail!("{context} returned error status: 403 Forbidden")
 }
@@ -193,6 +215,10 @@ fn check_session(response: &Response) -> Result<()> {
 
 fn get(path: &str) -> Result<String> {
   let url = format!("{BASE_URL}{path}");
+  if path.starts_with("/books/") && BOOK_PAGES_BLOCKED.load(Ordering::Relaxed) {
+    debug_log!("GET {url}: skipped, book pages already blocked this run");
+    return Err(UserError(BOOK_PAGE_BLOCKED.to_owned()).into());
+  }
   debug_log!("GET {url}");
 
   let res = retry(Exponential::from_millis(500).map(jitter).take(3), || {
@@ -211,6 +237,7 @@ fn get(path: &str) -> Result<String> {
 fn post_form_browser(path: &str, fields: &[(String, String)]) -> Result<String> {
   let url = format!("{BASE_URL}{path}");
   debug_log!("POST {url} (browser)");
+  invalidate_shelf();
 
   let res = retry(Exponential::from_millis(500).map(jitter).take(3), || {
     client()?
@@ -233,14 +260,31 @@ fn post_form_browser(path: &str, fields: &[(String, String)]) -> Result<String> 
   }
 
   check_session(&res)?;
+  if write_redirected_to_book_page(&res, &url) {
+    return Ok(String::new());
+  }
   let res = check_blocked(res, &format!("POST {url}"))?;
   res.error_for_status_ref().context(format!("POST {url} returned error status"))?;
   res.text().context(format!("Failed to read body from POST {url}"))
 }
 
+/// The client follows redirects, and successful writes often redirect back to
+/// the book page, which Cloudflare blocks. The write itself went through then.
+fn write_redirected_to_book_page(res: &Response, url: &str) -> bool {
+  let redirected = res.status() == StatusCode::FORBIDDEN
+    && res.url().as_str() != url
+    && res.url().path().starts_with("/books/");
+  if redirected {
+    debug_log!("POST {url}: redirected to blocked {}, treating as success", res.url());
+    BOOK_PAGES_BLOCKED.store(true, Ordering::Relaxed);
+  }
+  redirected
+}
+
 fn post_form(path: &str, fields: &[(&str, &str)]) -> Result<String> {
   let url = format!("{BASE_URL}{path}");
   debug_log!("POST {url}");
+  invalidate_shelf();
 
   let csrf = fields.iter().find(|(k, _)| *k == "authenticity_token").map(|(_, v)| *v).unwrap_or("");
 
@@ -268,6 +312,9 @@ fn post_form(path: &str, fields: &[(&str, &str)]) -> Result<String> {
   }
 
   check_session(&res)?;
+  if write_redirected_to_book_page(&res, &url) {
+    return Ok(String::new());
+  }
   let res = check_blocked(res, &format!("POST {url}"))?;
   res.error_for_status_ref().context(format!("POST {url} returned error status"))?;
   res.text().context(format!("Failed to read body from POST {url}"))
@@ -362,7 +409,9 @@ fn status_to_str(status_id: u8) -> &'static str {
     3 => "read",
     4 => "paused",
     5 => "did-not-finish",
-    6 => "rereading",
+    // StoryGraph has no "rereading" status: the website starts a reread of a
+    // finished book by setting it to currently-reading.
+    6 => "currently-reading",
     _ => "currently-reading",
   }
 }
@@ -397,10 +446,277 @@ fn privacy_toggle(doc: &Html) -> Option<PrivacyToggle> {
   Some(PrivacyToggle { is_private, action, fields })
 }
 
-/// Fetch /books/:slug and extract mutable form state needed for POST calls.
+// ── Shelf page (stands in for blocked book pages) ─────────────────────────────
+
+/// The `/currently-reading/{slug}` page (currently reading + paused), cached
+/// until the next POST so one CLI run doesn't download it (~1 MB) repeatedly.
+static SHELF: Mutex<Option<String>> = Mutex::new(None);
+
+fn shelf_page() -> Result<String> {
+  if let Some(html) = SHELF.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+    return Ok(html);
+  }
+  let user = get_user()?;
+  let html = get(&format!("/currently-reading/{}", user.slug))?;
+  *SHELF.lock().unwrap_or_else(|e| e.into_inner()) = Some(html.clone());
+  Ok(html)
+}
+
+fn invalidate_shelf() {
+  *SHELF.lock().unwrap_or_else(|e| e.into_inner()) = None;
+  *FULL_SHELF.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// The shelf page only lists the first 10 paused books; a "Load more..." link
+/// (`?page=2`, ...) fetches the rest 10 at a time. This is the shelf page with
+/// those later pages' paused books appended, each in its own
+/// `.paused-books-panes` div so the shelf scrapers find them. Cached like SHELF.
+static FULL_SHELF: Mutex<Option<String>> = Mutex::new(None);
+
+/// Stops following "Load more" links after this many pages (200 paused books),
+/// in case StoryGraph ever keeps returning one.
+const MAX_SHELF_PAGES: usize = 20;
+
+fn full_shelf_page() -> Result<String> {
+  if let Some(html) = FULL_SHELF.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+    return Ok(html);
+  }
+
+  let mut html = shelf_page()?;
+  let mut next = load_more_paused_href(&html);
+  let mut seen = std::collections::HashSet::new();
+  let mut pages = 1;
+
+  while let Some(href) = next.take() {
+    if pages >= MAX_SHELF_PAGES || !seen.insert(href.clone()) {
+      debug_log!("full_shelf_page(): stopping at {href} after {pages} pages");
+      break;
+    }
+    // A failure here only loses the later pages: keep what's been read so far.
+    let body = match get(&href) {
+      Ok(body) => body,
+      Err(e) => {
+        debug_log!("full_shelf_page(): GET {href} failed, using {pages} page(s): {e:#}");
+        break;
+      }
+    };
+    let (fragment, more) = paused_page(&body);
+    debug_log!("full_shelf_page(): {href}: {} bytes, next {more:?}", fragment.len());
+
+    next = more;
+    pages += 1;
+    html.push_str("\n<div class=\"paused-books-panes\">");
+    html.push_str(&fragment);
+    html.push_str("</div>");
+  }
+
+  *FULL_SHELF.lock().unwrap_or_else(|e| e.into_inner()) = Some(html.clone());
+  Ok(html)
+}
+
+/// Reads one "Load more" reply: the paused books' markup, and the next page's link.
+fn paused_page(body: &str) -> (String, Option<String>) {
+  // The website loads these in the background, so the reply may be a script
+  // that inserts the books (HTML in a JS string) rather than a web page.
+  let content = if body.trim_start().starts_with('<') { body.to_owned() } else { unescape_js(body) };
+  // A full page also repeats the currently-reading books: keep only its
+  // paused section. Otherwise (script reply) keep the inserted markup as is.
+  let panes_sel = Selector::parse(".paused-books-panes").expect("valid");
+  let fragment = Html::parse_document(&content)
+    .select(&panes_sel)
+    .next()
+    .map(|el| el.inner_html())
+    .unwrap_or_else(|| content.clone());
+  let next = load_more_paused_href(&content);
+  (fragment, next)
+}
+
+/// The paused section's "Load more..." link, as a path.
+fn load_more_paused_href(html: &str) -> Option<String> {
+  if !html.contains("load-more-paused-btn") {
+    return None;
+  }
+  let sel = Selector::parse("a.load-more-paused-btn[href]").expect("valid");
+  let doc = Html::parse_document(html);
+  let href = doc.select(&sel).next()?.value().attr("href")?;
+  Some(href.strip_prefix(BASE_URL).unwrap_or(href).to_owned())
+}
+
+/// Undoes Rails' `escape_javascript` (`\"`, `\'`, `\/`, `\n`, `\\`, `\uXXXX`, ...),
+/// enough to read the HTML out of a script reply. Quotes around it are left in
+/// as stray text, which doesn't matter for scraping.
+fn unescape_js(s: &str) -> String {
+  let mut out = String::with_capacity(s.len());
+  let mut chars = s.chars();
+  while let Some(c) = chars.next() {
+    if c != '\\' {
+      out.push(c);
+      continue;
+    }
+    match chars.next() {
+      Some('n') => out.push('\n'),
+      Some('r') => out.push('\r'),
+      Some('t') => out.push('\t'),
+      Some('u') => {
+        let hex: String = chars.by_ref().take(4).collect();
+        match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+          Some(ch) => out.push(ch),
+          None => out.push_str(&hex),
+        }
+      }
+      Some(other) => out.push(other),
+      None => {}
+    }
+  }
+  out
+}
+
+/// Runs `find` on the shelf page, and if that finds nothing and the shelf has
+/// more paused books than the page shows, on the full shelf. So the extra
+/// pages are only fetched when actually needed.
+fn on_shelf<T>(find: impl Fn(&str) -> Option<T>) -> Result<Option<T>> {
+  let page = shelf_page()?;
+  if let Some(found) = find(&page) {
+    return Ok(Some(found));
+  }
+  if load_more_paused_href(&page).is_none() {
+    return Ok(None);
+  }
+  Ok(find(&full_shelf_page()?))
+}
+
+/// The book's `.book-pane` on the shelf page. It carries the same status label,
+/// privacy toggle, progress bar and hidden progress inputs as the book page.
+fn shelf_pane(shelf_html: &str, book_id: &str) -> Option<String> {
+  let doc = Html::parse_document(shelf_html);
+  let sel = Selector::parse(&format!(r#"div.book-pane[data-book-id="{book_id}"]"#)).ok()?;
+  doc.select(&sel).next().map(|el| el.html())
+}
+
+/// CSRF token plus the markup describing the user's copy of `book_id`: the book
+/// page, or if that's blocked, the book's pane on the shelf page. Fails with the
+/// blocked error (see `is_book_page_blocked`) if the book isn't on the shelf.
+fn book_state(book_id: &str) -> Result<(String, String)> {
+  match get(&format!("/books/{book_id}")) {
+    Ok(html) => {
+      let csrf = csrf_token(&html).context("Could not find CSRF token on book page")?;
+      return Ok((csrf, html));
+    }
+    Err(e) if is_book_page_blocked(&e) => {}
+    Err(e) => return Err(e),
+  }
+  let pane = on_shelf(|shelf| shelf_pane(shelf, book_id))?.ok_or_else(book_page_blocked)?;
+  let csrf = csrf_token(&shelf_page()?).context("Could not find CSRF token on shelf page")?;
+  Ok((csrf, pane))
+}
+
+/// Looks for the user's copy of a work in search results for `title`, which
+/// show the user's own edition of each work and its reading status (but not
+/// progress or privacy). Returns `book_id`'s own result if listed, otherwise a
+/// closely matching title that has a status, by the same author if `author` is
+/// given: the edition the user shelved. Returns that edition's id and pane.
+fn search_pane(book_id: &str, title: &str, author: Option<&str>) -> Result<Option<(String, String)>> {
+  let html = get(&format!("/browse?search_term={}", urlencoding::encode(title)))?;
+  let doc = Html::parse_document(&html);
+  // Only top-level panes carry data-author-ids; nested copies repeat data-book-id.
+  let pane_sel = Selector::parse("div.book-pane[data-author-ids]").expect("valid");
+  let title_sel = Selector::parse(r#"h3 a[href^="/books/"]"#).expect("valid");
+  let status_sel = Selector::parse(".read-status-label").expect("valid");
+  let author_sel = Selector::parse(r#"a[href^="/authors/"]"#).expect("valid");
+
+  let mut best: Option<(String, String, f32)> = None;
+  for pane in doc.select(&pane_sel) {
+    let Some(id) = pane.value().attr("data-book-id") else { continue };
+    if id == book_id {
+      debug_log!("search_pane({book_id}, {title:?}): exact match");
+      return Ok(Some((id.to_owned(), pane.html())));
+    }
+    let has_status = pane
+      .select(&status_sel)
+      .next()
+      .is_some_and(|el| parse_status_text(&el.text().collect::<String>()).is_some());
+    if !has_status {
+      continue;
+    }
+    let pane_title = pane.select(&title_sel).next().map(|el| el.text().collect::<String>()).unwrap_or_default();
+    // Same strict bar as find_on_shelf: other volumes of a series must not match.
+    let score = title_match_score(title, pane_title.trim());
+    if score < 0.9 {
+      continue;
+    }
+    // Different books can share a title, so the author has to match too.
+    if let Some(author) = author.filter(|a| !a.trim().is_empty()) {
+      let pane_authors: Vec<String> = pane.select(&author_sel).map(|el| el.text().collect()).collect();
+      if !author_matches(author, &pane_authors) {
+        debug_log!("search_pane({book_id}): {id} matches {title:?} but not author {author:?} ({pane_authors:?})");
+        continue;
+      }
+    }
+    if best.as_ref().is_none_or(|(_, _, s)| score > *s) {
+      best = Some((id.to_owned(), pane.html(), score));
+    }
+  }
+
+  debug_log!("search_pane({book_id}, {title:?}): {:?}", best.as_ref().map(|(id, _, s)| (id, s)));
+  Ok(best.map(|(id, html, _)| (id, html)))
+}
+
+/// Whether the Kobo's author string names any of a search result's authors,
+/// judged by surname so "Sarah J. Maas", "Sarah Maas" and "Maas, Sarah J." all
+/// match StoryGraph's "Sarah J. Maas".
+fn author_matches(kobo_author: &str, pane_authors: &[String]) -> bool {
+  let words = |s: &str| -> Vec<String> {
+    s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect()
+  };
+  let kobo_words = words(kobo_author);
+  pane_authors
+    .iter()
+    .filter_map(|a| words(a).pop())
+    .any(|surname| kobo_words.contains(&surname))
+}
+
+/// A CSRF token for endpoints that need nothing else from the book's page. The
+/// token is session-wide, so when the book page is blocked and the book isn't on
+/// the shelf, the shelf page's token (already fetched by `book_state`) works too.
+fn csrf_for(book_id: &str) -> Result<String> {
+  match book_state(book_id) {
+    Ok((csrf, _)) => Ok(csrf),
+    Err(e) if is_book_page_blocked(&e) => csrf_token(&shelf_page()?).context("Could not find CSRF token on shelf page"),
+    Err(e) => Err(e),
+  }
+}
+
+/// Placeholder state for a book whose page is blocked and that isn't on the shelf.
+fn unknown_user_book(book_id: &str, status_id: Option<u8>) -> UserBook {
+  UserBook {
+    book_id: book_id.to_owned(),
+    status_id,
+    is_private: false,
+    progress_percent: if status_id == Some(3) { 100 } else { 0 },
+    progress_pages: 0,
+    book_pages: 0,
+    progress_type: "percentage".to_owned(),
+    edition_format: String::new(),
+  }
+}
+
+/// Re-reads the book's state after a write. If that needs the blocked book
+/// page, returns `status_id` as the status just set rather than failing a
+/// write that went through.
+fn refreshed_user_book(book_id: &str, status_id: Option<u8>) -> Result<UserBook> {
+  match book_state(book_id) {
+    Ok((_, html)) => parse_user_book(book_id, &html),
+    Err(e) if is_book_page_blocked(&e) => {
+      debug_log!("refreshed_user_book({book_id}): book page blocked, assuming status {status_id:?}");
+      Ok(unknown_user_book(book_id, status_id))
+    }
+    Err(e) => Err(e),
+  }
+}
+
+/// Fetch the book's form state (see `book_state`) needed for POST calls.
 fn fetch_page_data(book_id: &str) -> Result<(String, PageData)> {
-  let html = get(&format!("/books/{book_id}"))?;
-  let csrf = csrf_token(&html).context("Could not find CSRF token on book page")?;
+  let (csrf, html) = book_state(book_id)?;
   let book_pages = hidden_value(&html, "read_status[book_num_of_pages]");
   let last_pages = hidden_value(&html, "read_status[last_reached_pages]");
   let last_percent = hidden_value(&html, "read_status[last_reached_percent]");
@@ -501,11 +817,12 @@ pub fn get_goals() -> Result<ReadingGoals> {
     })
     .collect();
 
-  // Status messages from italic mobile divs (shorter single-line versions)
+  // Status messages from italic mobile divs (shorter single-line versions).
+  // These often include emoji (e.g. on reaching a goal), which the Kobo can't show.
   let status_sel = Selector::parse("div.italic p").expect("valid");
   let statuses: Vec<String> = doc
     .select(&status_sel)
-    .map(|el| el.text().collect::<String>().trim().to_owned())
+    .map(|el| strip_emoji(&el.text().collect::<String>()))
     .collect();
 
   debug_log!(
@@ -614,6 +931,11 @@ pub fn get_streak() -> Result<Streak> {
         .unwrap_or_default();
       streak.reading_left = dd_text;
     }
+  }
+
+  // Shown as-is on the Kobo, which can't render emoji.
+  for text in [&mut streak.requirement, &mut streak.period, &mut streak.reading_left] {
+    *text = strip_emoji(text);
   }
 
   debug_log!("get_streak(): {streak:?}");
@@ -745,9 +1067,11 @@ pub fn get_feed() -> Result<Vec<FeedItem>> {
       });
 
     // Review snippet from line-clamped link
+    // (emoji removed, as the Kobo can't render them)
     let review_snippet = item.select(&review_sel).next()
-      .map(|el| el.text().collect::<String>().trim().to_owned())
+      .map(|el| strip_emoji(&el.text().collect::<String>()))
       .filter(|s| !s.is_empty());
+    let action = strip_emoji(&action);
 
     items.push(FeedItem { username, action, time_ago, book_title, book_author, cover_url, genres, moods, rating, review_snippet });
   }
@@ -898,14 +1222,17 @@ fn scrape_shelf_section(doc: &Html, container_selector: &str, status: &str) -> V
 /// Both sections live on the same `/currently-reading/{slug}` page:
 ///   .read-books         → currently reading
 ///   .paused-books-panes → paused
+/// Paused books beyond the first 10 come from the shelf's later pages (see `full_shelf_page`).
 pub fn list_reading() -> Result<Vec<ReadingBook>> {
   assert_credentials();
-  let user = get_user()?;
-  let html = get(&format!("/currently-reading/{}", user.slug))?;
+  let html = full_shelf_page()?;
   let doc = Html::parse_document(&html);
 
   let mut books = scrape_shelf_section(&doc, ".read-books", "reading");
   books.extend(scrape_shelf_section(&doc, ".paused-books-panes", "paused"));
+  // In case a later page repeats books from an earlier one.
+  let mut seen = std::collections::HashSet::new();
+  books.retain(|book| seen.insert(book.id.clone()));
 
   debug_log!("list_reading(): {} books total", books.len());
   Ok(books)
@@ -920,8 +1247,16 @@ pub fn get_user() -> Result<User> {
     return Ok(User { username: CONFIG.user_slug.clone(), slug: CONFIG.user_slug.clone() });
   }
 
+  // Remembered for the rest of this CLI run, so reloading the shelf page after
+  // a write doesn't fetch the home page again just for the profile link.
+  static SLUG: OnceLock<String> = OnceLock::new();
+  if let Some(slug) = SLUG.get() {
+    return Ok(User { username: slug.clone(), slug: slug.clone() });
+  }
+
   let html = get("/")?;
   let slug = profile_slug(&html).context("Could not find user profile link — session may be expired")?;
+  let _ = SLUG.set(slug.clone());
 
   Ok(User { username: slug.clone(), slug })
 }
@@ -1018,10 +1353,29 @@ pub fn find_by_isbn(isbn: &str) -> Result<Option<Book>> {
 /// Fetches the current user's reading status and progress for a book.
 /// Returns zeroed progress fields if the book has no page count on StoryGraph
 /// (common for Kindle/digital editions).
-pub fn get_user_book(book_id: &str) -> Result<UserBook> {
+/// If the book isn't on the shelf and its page is blocked, its status comes
+/// from search results for `title` (no progress or privacy there); without
+/// a title or a result, the status is unknown so the status menu still opens.
+pub fn get_user_book(book_id: &str, title: Option<&str>) -> Result<UserBook> {
   assert_credentials();
-  let html = get(&format!("/books/{book_id}"))?;
-  parse_user_book(book_id, &html)
+  match book_state(book_id) {
+    Ok((_, html)) => parse_user_book(book_id, &html),
+    Err(e) if is_book_page_blocked(&e) => {
+      debug_log!("get_user_book({book_id}): not on shelf and book page blocked");
+      Ok(unknown_user_book(book_id, searched_status(book_id, title)?))
+    }
+    Err(e) => Err(e),
+  }
+}
+
+/// `book_id`'s reading status from search results for `title`, if it's listed
+/// (only this exact edition counts).
+fn searched_status(book_id: &str, title: Option<&str>) -> Result<Option<u8>> {
+  let Some(title) = title else { return Ok(None) };
+  Ok(match search_pane(book_id, title, None)? {
+    Some((id, pane)) if id == book_id => parse_user_book(book_id, &pane)?.status_id,
+    _ => None,
+  })
 }
 
 fn parse_user_book(book_id: &str, html: &str) -> Result<UserBook> {
@@ -1077,31 +1431,30 @@ fn parse_user_book(book_id: &str, html: &str) -> Result<UserBook> {
 }
 
 /// Sets the reading status of a book (to-read, reading, read, paused, dnf).
-/// POSTs to `/update-status.js` and re-fetches the book page to confirm.
+/// POSTs to `/update-status.js` and re-reads the book's state to confirm.
 /// The book's privacy is left as it is (see `set_privacy`).
 pub fn update_status(book_id: &str, status_id: u8) -> Result<UserBook> {
   assert_credentials();
-  let (_html, data) = fetch_page_data(book_id)?;
+  // Only the CSRF token is needed, so this works for books whose page is blocked.
+  let csrf = csrf_for(book_id)?;
+  post_status(book_id, status_id, &csrf)?;
+  refreshed_user_book(book_id, Some(status_id))
+}
+
+/// Just the status POST, for callers that already have a CSRF token and will
+/// read the book back themselves.
+fn post_status(book_id: &str, status_id: u8, csrf: &str) -> Result<()> {
   let status_str = status_to_str(status_id);
-
-  let fields = vec![
-    ("authenticity_token", data.csrf.as_str()),
-    ("book_id", book_id),
-    ("status", status_str),
-  ];
-
   let path = format!("/update-status.js?book_id={book_id}&status={status_str}");
-  post_form(&path, &fields[..1])?;
-
-  // Re-fetch to return current state.
-  parse_user_book(book_id, &get(&format!("/books/{book_id}"))?)
+  post_form(&path, &[("authenticity_token", csrf)])?;
+  Ok(())
 }
 
 /// Makes a book private or public by submitting the book page's privacy toggle
 /// form (`/toggle-book-privacy.js`). No-op if it's already in the wanted state.
 pub fn set_privacy(book_id: &str, private: bool) -> Result<UserBook> {
   assert_credentials();
-  let html = get(&format!("/books/{book_id}"))?;
+  let (_, html) = book_state(book_id)?;
   let Some(toggle) = privacy_toggle(&Html::parse_document(&html)) else {
     return Err(UserError("This book has no privacy option on StoryGraph. Set a status for it first.".to_owned()).into());
   };
@@ -1118,26 +1471,84 @@ pub fn set_privacy(book_id: &str, private: bool) -> Result<UserBook> {
   let fields: Vec<(&str, &str)> = toggle.fields.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
   post_form(&path, &fields)?;
 
-  parse_user_book(book_id, &get(&format!("/books/{book_id}"))?)
+  let mut user_book = refreshed_user_book(book_id, None)?;
+  if user_book.status_id.is_none() {
+    user_book.is_private = private; // read-back was blocked
+  }
+  Ok(user_book)
 }
 
-/// Updates reading progress for a book. `progress_type` is `"percentage"` or `"pages"`.
-/// Fetches the book page first to extract the CSRF token and current page count.
-/// If the book has no reading status, automatically sets it to "Currently Reading" first.
-pub fn update_progress(book_id: &str, progress_type: &str, value: u32) -> Result<UserBook> {
-  assert_credentials();
-  let (html, mut data) = fetch_page_data(book_id)?;
+/// Returned by [`update_progress`] for a finished book when the user hasn't agreed
+/// to a reread. Nothing was changed on StoryGraph; the hook asks whether to start one.
+#[derive(Debug)]
+pub struct BookFinished;
 
-  let current_status = parse_user_book(book_id, &html)?.status_id;
-  if current_status.is_none() {
-    update_status(book_id, 2)?;
-    let (_, fresh) = fetch_page_data(book_id)?;
-    data = fresh;
-  } else if current_status == Some(3) {
-    update_status(book_id, 6)?;
-    let (_, fresh) = fetch_page_data(book_id)?;
-    data = fresh;
+impl std::fmt::Display for BookFinished {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "This book is marked as read on StoryGraph")
   }
+}
+
+impl std::error::Error for BookFinished {}
+
+/// Updates reading progress for a book. `progress_type` is `"percentage"` or `"pages"`.
+/// Reads the book page (or its shelf pane, if blocked) first for the CSRF token and page count.
+/// Books with no status, to-read, paused or DNF are set to "Currently Reading" first. A
+/// finished book starts a reread only when `reread` (the user agreed to one); otherwise
+/// nothing is changed and [`BookFinished`] is returned. `title` lets the status be found via
+/// search when the book isn't on the shelf and its page is blocked.
+pub fn update_progress(
+  book_id: &str,
+  progress_type: &str,
+  value: u32,
+  title: Option<&str>,
+  reread: bool,
+) -> Result<UserBook> {
+  assert_credentials();
+  // A finished book reaching here has `reread` set (see skip_finished): a reread
+  // is started by setting it to currently reading, as on the website.
+  let status_for_progress = |current: Option<u8>| match current {
+    None | Some(1 | 3 | 4 | 5) => Some(2),
+    _ => None,
+  };
+  let skip_finished = |current: Option<u8>| -> Result<()> {
+    if current == Some(3) && !reread {
+      debug_log!("update_progress({book_id}): book is finished and no reread was requested, not syncing");
+      return Err(BookFinished.into());
+    }
+    Ok(())
+  };
+
+  let data = match fetch_page_data(book_id) {
+    Ok((html, data)) => {
+      let current_status = parse_user_book(book_id, &html)?.status_id;
+      skip_finished(current_status)?;
+      match status_for_progress(current_status) {
+        Some(new_status) => {
+          debug_log!("update_progress({book_id}): status {current_status:?}, setting {new_status}");
+          post_status(book_id, new_status, &data.csrf)?;
+          // The page count doesn't change with the status, so the data read above
+          // is reused, unless the page had no progress form before (no status).
+          if data.book_pages.is_empty() { fetch_page_data(book_id)?.1 } else { data }
+        }
+        None => data,
+      }
+    }
+    // Not on the shelf, and its page is blocked: take its status from search
+    // results instead, then shelve it, after which its pane is on the shelf page.
+    // A book already marked currently reading should have been on the shelf; if
+    // search says so anyway there's no page to post progress from, so that fails
+    // with the blocked error.
+    Err(e) if is_book_page_blocked(&e) => {
+      let current_status = searched_status(book_id, title)?;
+      skip_finished(current_status)?;
+      let Some(new_status) = status_for_progress(current_status) else { return Err(e) };
+      debug_log!("update_progress({book_id}): not on shelf, searched status {current_status:?}, setting {new_status}");
+      post_status(book_id, new_status, &csrf_for(book_id)?)?;
+      fetch_page_data(book_id)?.1
+    }
+    Err(e) => return Err(e),
+  };
 
   let value_str = value.to_string();
 
@@ -1150,7 +1561,7 @@ pub fn update_progress(book_id: &str, progress_type: &str, value: u32) -> Result
     ("on_book_page", "true"),
   ])?;
 
-  parse_user_book(book_id, &get(&format!("/books/{book_id}"))?)
+  refreshed_user_book(book_id, Some(2))
 }
 
 /// Creates a reading journal entry (note + progress snapshot) via `/update-progress-with-note`.
@@ -1204,9 +1615,9 @@ pub fn submit_review(
 
   let book_uuid = book_id;
 
-  // Fetch /reviews/new for a CSRF token scoped to the review form.
-  let form_html = get(&format!("/reviews/new?book_id={book_uuid}&return_to=%2Fbooks%2F{book_uuid}"))?;
-  let csrf = csrf_token(&form_html).context("Could not find CSRF token on reviews/new page")?;
+  // /reviews/new just redirects to the book page, and was only ever used for
+  // its CSRF token; the session-wide token from the book or shelf page works.
+  let csrf = csrf_for(book_uuid)?;
 
   let (stars_int, stars_dec) = match rating {
     Some(r) if r > 0.0 => {
@@ -1252,10 +1663,40 @@ pub fn submit_review(
   Ok(())
 }
 
+fn is_audio(format: &str) -> bool {
+  format.to_lowercase().contains("audio")
+}
+
 /// Returns all non-audio editions of a book from its `/editions` page.
 /// Used by the hook's edition picker so the user can switch to the correct
 /// physical or digital edition for accurate page tracking.
 pub fn list_editions(book_id: &str, reading_format: i32, language: &str) -> Result<Vec<Edition>> {
+  let editions = scrape_editions(book_id)?;
+
+  let is_digital = |f: &str| {
+    let f = f.to_lowercase();
+    f.contains("ebook") || f.contains("e-book") || f.contains("epub")
+      || f.contains("kindle") || f.contains("digital") || f.contains("mobi")
+      || f.contains("pdf")
+  };
+
+  let editions: Vec<Edition> = editions
+    .into_iter()
+    .filter(|e| !is_audio(&e.format))
+    .filter(|e| match reading_format {
+      1 => !is_digital(&e.format), // Print
+      4 => is_digital(&e.format),  // E-Book
+      _ => true,                   // All
+    })
+    .filter(|e| language.is_empty() || e.language.eq_ignore_ascii_case(language))
+    .collect();
+
+  debug_log!("list_editions({book_id}): returning {} editions (format={reading_format}, lang={language:?})", editions.len());
+  Ok(editions)
+}
+
+/// Scrapes every edition of a book from its `/editions` page, audio included.
+fn scrape_editions(book_id: &str) -> Result<Vec<Edition>> {
   assert_credentials();
   let html = get(&format!("/books/{book_id}/editions"))?;
   let doc = Html::parse_document(&html);
@@ -1341,11 +1782,6 @@ pub fn list_editions(book_id: &str, reading_format: i32, language: &str) -> Resu
       }
     }
 
-    // Skip audio editions
-    if format.to_lowercase().contains("audio") {
-      continue;
-    }
-
     let cover_url = pane
       .select(&img_sel)
       .next()
@@ -1365,24 +1801,6 @@ pub fn list_editions(book_id: &str, reading_format: i32, language: &str) -> Resu
     });
   }
 
-  let is_digital = |f: &str| {
-    let f = f.to_lowercase();
-    f.contains("ebook") || f.contains("e-book") || f.contains("epub")
-      || f.contains("kindle") || f.contains("digital") || f.contains("mobi")
-      || f.contains("pdf")
-  };
-
-  let editions: Vec<Edition> = editions
-    .into_iter()
-    .filter(|e| match reading_format {
-      1 => !is_digital(&e.format), // Print
-      4 => is_digital(&e.format),  // E-Book
-      _ => true,                   // All
-    })
-    .filter(|e| language.is_empty() || e.language.eq_ignore_ascii_case(language))
-    .collect();
-
-  debug_log!("list_editions({book_id}): returning {} editions (format={reading_format}, lang={language:?})", editions.len());
   Ok(editions)
 }
 
@@ -1417,9 +1835,13 @@ pub fn title_match_score(query_title: &str, result_title: &str) -> f32 {
 /// if nothing matches.
 pub fn find_on_shelf(query_title: &str) -> Result<Option<(String, u32)>> {
   assert_credentials();
-  let user = get_user()?;
-  let html = get(&format!("/currently-reading/{}", user.slug))?;
-  let doc = Html::parse_document(&html);
+  let found = on_shelf(|html| find_on_shelf_in(html, query_title))?;
+  debug_log!("find_on_shelf({query_title:?}): {found:?}");
+  Ok(found)
+}
+
+fn find_on_shelf_in(html: &str, query_title: &str) -> Option<(String, u32)> {
+  let doc = Html::parse_document(html);
 
   let pane_sel     = Selector::parse(".book-pane").expect("valid");
   let title_sel    = Selector::parse("h3.font-bold a").expect("valid");
@@ -1472,40 +1894,72 @@ pub fn find_on_shelf(query_title: &str) -> Result<Option<(String, u32)>> {
     }
   }
 
-  debug_log!("find_on_shelf({query_title:?}): {:?}", best.as_ref().map(|(id, s, p)| (id, s, p)));
-  Ok(best.map(|(id, _, progress)| (id, progress)))
+  best.map(|(id, _, progress)| (id, progress))
 }
 
-/// Finds which edition of this book the user currently has on their StoryGraph
-/// currently-reading shelf. Fetches the shelf page and looks for any edition UUID
-/// that matches a known edition of the same work.
-pub fn find_current_edition(book_id: &str) -> Result<String> {
+/// Finds which edition of `book_id`'s work is on the currently-reading/paused shelf,
+/// audiobooks included (the user may have listened for a while, then switched to
+/// reading on Kobo — StoryGraph's shelf entry stays on the audiobook edition).
+/// `title` is used to match by title when the editions page is blocked.
+pub fn shelved_edition(book_id: &str, title: Option<&str>) -> Result<Option<String>> {
   assert_credentials();
 
-  let editions = list_editions(book_id, 0, "")?;
-  let user = get_user()?;
-  let shelf_html = get(&format!("/currently-reading/{}", user.slug))?;
-
-  // Check the stored book_id first — it may already be the right one.
-  if shelf_html.contains(book_id) {
-    return Ok(book_id.to_owned());
+  // Check the stored book_id first — it's usually the right one, and saves fetching editions.
+  if on_shelf(|shelf| shelf.contains(book_id).then_some(()))?.is_some() {
+    return Ok(Some(book_id.to_owned()));
   }
 
-  // Check each edition UUID against the shelf HTML.
-  for edition in &editions {
-    if shelf_html.contains(&edition.book_id) {
-      return Ok(edition.book_id.clone());
+  let editions = match scrape_editions(book_id) {
+    Ok(editions) => editions,
+    // The editions list is a /books/ page. Without it, match the work on the
+    // shelf by title instead (strictly, see find_on_shelf).
+    Err(e) if is_book_page_blocked(&e) => {
+      let found = match title {
+        Some(title) => find_on_shelf(title)?.map(|(id, _)| id),
+        None => None,
+      };
+      debug_log!("shelved_edition({book_id}): editions page blocked, shelf title match {found:?}");
+      return Ok(found);
     }
-  }
+    Err(e) => return Err(e),
+  };
+  let found = on_shelf(|shelf| editions.iter().find(|e| shelf.contains(&e.book_id)).map(|e| e.book_id.clone()))?;
+  debug_log!("shelved_edition({book_id}): {found:?}");
+  Ok(found)
+}
 
-  anyhow::bail!("Could not find this book on your currently reading shelf on StoryGraph.")
+/// Finds a different edition of `book_id`'s work that the user has shelved with
+/// any status (e.g. a to-read or finished audiobook edition), via search results
+/// for `title` by `author`, so progress goes to that entry instead of adding a
+/// second one. Both are required: a title alone could match a different book.
+pub fn searched_edition(book_id: &str, title: &str, author: &str) -> Result<Option<String>> {
+  assert_credentials();
+  if author.trim().is_empty() {
+    debug_log!("searched_edition({book_id}, {title:?}): no author on the Kobo, skipping");
+    return Ok(None);
+  }
+  let found = search_pane(book_id, title, Some(author))?.map(|(id, _)| id).filter(|id| id != book_id);
+  debug_log!("searched_edition({book_id}, {title:?}, {author:?}): {found:?}");
+  Ok(found)
 }
 
 /// If `book_id` is not a digital edition, returns the book_id of a digital edition
 /// of the same work. Falls back to the original book_id if no digital edition is found.
+/// Both lookups use /books/ pages; when those are blocked, keeps `book_id`.
 pub fn prefer_digital_edition(book_id: &str) -> Result<String> {
   assert_credentials();
-  let html = get(&format!("/books/{book_id}"))?;
+  let blocked = |e: &anyhow::Error| {
+    let blocked = is_book_page_blocked(e);
+    if blocked {
+      debug_log!("prefer_digital_edition({book_id}): book pages blocked, keeping this edition");
+    }
+    blocked
+  };
+  let html = match get(&format!("/books/{book_id}")) {
+    Ok(html) => html,
+    Err(e) if blocked(&e) => return Ok(book_id.to_owned()),
+    Err(e) => return Err(e),
+  };
   let user_book = parse_user_book(book_id, &html)?;
 
   let fmt = user_book.edition_format.to_lowercase();
@@ -1513,7 +1967,11 @@ pub fn prefer_digital_edition(book_id: &str) -> Result<String> {
     return Ok(book_id.to_owned());
   }
 
-  let editions = list_editions(book_id, 0, "")?;
+  let editions = match list_editions(book_id, 0, "") {
+    Ok(editions) => editions,
+    Err(e) if blocked(&e) => return Ok(book_id.to_owned()),
+    Err(e) => return Err(e),
+  };
   Ok(editions
     .into_iter()
     .find(|e| e.format.to_lowercase().contains("digital"))

@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::{debug_log, log};
 use crate::config::CONFIG;
 use crate::storygraph;
-use crate::utils::{VERSION, book_not_found, normalize_identifiers};
+use crate::utils::{VERSION, book_not_found, kobo_title, normalize_identifiers};
 
 /// Sync Kobo highlights and notes for a book as StoryGraph journal entries.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -55,7 +55,8 @@ pub fn run(args: UpdateJournal) -> Result<()> {
     return Ok(());
   }
 
-  let user_book = storygraph::get_user_book(&book_id)?;
+  let title = kobo_title(Some(&content_id)).map(|(title, _)| title);
+  let user_book = storygraph::get_user_book(&book_id, title.as_deref())?;
   let progress_percent = user_book.progress_percent;
   debug_log!("update-journal: posting {count} annotations at {progress_percent}%");
 

@@ -239,7 +239,15 @@ void MenuController::triggered(QAction *action) {
 
   case MenuOption::TOGGLE_ENABLED: {
     QString contentId = SyncController::getInstance()->contentId;
-    Settings::getInstance()->setEnabled(contentId, !Settings::getInstance()->isEnabled(contentId));
+    Settings *settings = Settings::getInstance();
+    bool enable = !settings->isEnabled(contentId);
+    // Auto-sync does nothing for a book finished on StoryGraph, so turning it on
+    // asks about a reread first; "Not now" leaves auto-sync off.
+    if (enable && settings->getStatus(contentId) == 3) {
+      SyncController::getInstance()->offerReread(true);
+    } else {
+      settings->setEnabled(contentId, enable);
+    }
     break;
   }
 

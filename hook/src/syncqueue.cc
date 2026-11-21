@@ -60,7 +60,7 @@ void SyncQueue::prepareNext() {
   }
 }
 
-void SyncQueue::run(QString contentId, bool manual) {
+void SyncQueue::run(QString contentId, bool manual, bool reread) {
   int progress = queue[contentId];
   queue.remove(contentId);
 
@@ -102,8 +102,8 @@ void SyncQueue::run(QString contentId, bool manual) {
   options.contentId = contentId;
 
   bool hasLinkedId = !Settings::getInstance()->getLinkedId(contentId).isEmpty();
-  CLI *cli = CLI::update(progress, options);
-  QObject::connect(cli, &CLI::response, this, [this, contentId, hasLinkedId](QJsonObject doc) {
+  CLI *cli = CLI::update(progress, options, reread);
+  QObject::connect(cli, &CLI::response, this, [this, contentId, hasLinkedId, manual](QJsonObject doc) {
     if (!hasLinkedId) {
       QString bookId = doc.value("resolved_book_id").toString();
       if (!bookId.isEmpty()) {
@@ -113,6 +113,19 @@ void SyncQueue::run(QString contentId, bool manual) {
     int statusId = doc.value("status_id").toInt(0);
     if (statusId > 0) {
       Settings::getInstance()->setStatus(contentId, statusId);
+    }
+    // Finished on StoryGraph, so nothing was synced (failure() follows). A
+    // manual sync asks about a reread once the "Syncing..." dialog has closed.
+    // An auto-sync stays silent and switches auto-sync off for the book, since
+    // it can't do anything for it; the saved status makes turning it back on,
+    // or opening the book (with auto-sync on by default), ask about a reread.
+    if (doc.value("error_code").toString() == "BOOK_FINISHED") {
+      if (manual) {
+        QTimer::singleShot(0, this, [this, contentId]() { showRereadPrompt(contentId); });
+      } else {
+        nh_log("%s is finished on StoryGraph, turning auto-sync off for it", qPrintable(contentId));
+        Settings::getInstance()->setEnabled(contentId, false);
+      }
     }
     if (doc.value("needs_shelf_confirmation").toBool()) {
       pendingShelfConfirmation = true;
@@ -219,10 +232,63 @@ void SyncQueue::showCompletionPrompt(QString contentId) {
   QObject::connect(prompt, &QDialog::rejected, this, [this, prompt, contentId]() {
     CLI::Options options;
     options.contentId = contentId;
-    CLI::setUserBook(3, options);
+    CLI *cli = CLI::setUserBook(3, options);
+    // Saved so reopening the book later offers a reread.
+    QObject::connect(cli, &CLI::response, this, [contentId](QJsonObject doc) {
+      int status = doc.value("status_id").toInt(0);
+      if (status > 0)
+        Settings::getInstance()->setStatus(contentId, status);
+    });
     prompt->deleteLater();
   });
   prompt->open();
+}
+
+void SyncQueue::showRereadPrompt(QString contentId, bool enableAutoSync) {
+  ConfirmationDialog *prompt = ConfirmationDialogFactory__getConfirmationDialog(nullptr);
+  ConfirmationDialog__setTitle(prompt, "Start a reread?");
+  ConfirmationDialog__setText(prompt,
+      "This book is marked as read on StoryGraph. Start a new read-through and sync your progress?");
+  ConfirmationDialog__setAcceptButtonText(prompt, "Start reread");
+  ConfirmationDialog__setRejectButtonText(prompt, "Not now");
+  ConfirmationDialog__showCloseButton(prompt, false);
+
+  QObject::connect(prompt, &QDialog::accepted, this, [this, prompt, contentId, enableAutoSync]() {
+    prompt->deleteLater();
+    startReread(contentId, enableAutoSync);
+  });
+  QObject::connect(prompt, &QDialog::rejected, prompt, [prompt]() { prompt->deleteLater(); });
+
+  prompt->open();
+}
+
+void SyncQueue::startReread(QString contentId, bool enableAutoSync) {
+  Settings *settings = Settings::getInstance();
+
+  // Auto-sync was likely switched off when the book reached 100% last time.
+  if (enableAutoSync || settings->getAutoSyncDefault()) {
+    settings->setEnabled(contentId, true);
+  }
+
+  updateReadProgress(contentId);
+  if (queue.value(contentId) > 0) {
+    run(contentId, true, true);
+    return;
+  }
+
+  // At the very start of the book there's no progress to sync yet, so just set
+  // the status: currently reading starts the reread, as on the website.
+  queue.remove(contentId);
+  settings->setLastProgress(contentId, 0);
+
+  CLI::Options options;
+  options.contentId = contentId;
+  CLI *cli = CLI::setUserBook(2, options);
+  QObject::connect(cli, &CLI::response, this, [contentId](QJsonObject doc) {
+    int status = doc.value("status_id").toInt(0);
+    if (status > 0)
+      Settings::getInstance()->setStatus(contentId, status);
+  });
 }
 
 void SyncQueue::closeDialog() {

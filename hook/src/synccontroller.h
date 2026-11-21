@@ -23,6 +23,13 @@ public:
   void manualSync();
   QDateTime getAlarm();
 
+  // Called when a book is opened: once its reading view shows, a book finished
+  // on StoryGraph gets the reread prompt (if auto-sync is on by default).
+  void bookOpened();
+
+  // Shows the reread prompt for the current book (see SyncQueue::showRereadPrompt).
+  void offerReread(bool enableAutoSync);
+
 public Q_SLOTS:
   void currentViewIndexChanged(int index);
   void pageChanged();
@@ -41,4 +48,5 @@ private:
 
   QString lastViewName;
   int lastSyncDaily = 0;
+  bool checkRereadOnView = false;
 };

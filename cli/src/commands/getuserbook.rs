@@ -3,7 +3,7 @@ use argh::FromArgs;
 
 use crate::log;
 use crate::storygraph;
-use crate::utils::{VERSION, book_not_found, normalize_identifiers};
+use crate::utils::{VERSION, book_not_found, kobo_title, normalize_identifiers};
 
 /// Get the current user's reading status for a book.
 #[derive(FromArgs, PartialEq, Debug)]
@@ -33,7 +33,8 @@ pub fn run(args: GetUserBook) -> Result<()> {
     book_not_found("No ISBN found. Please link book manually.")
   };
 
-  let user_book = storygraph::get_user_book(&book_id)?;
+  let title = kobo_title(args.content_id.as_deref()).map(|(title, _)| title);
+  let user_book = storygraph::get_user_book(&book_id, title.as_deref())?;
   log!("BEGIN_JSON\n{}", serde_json::to_string(&user_book)?);
   Ok(())
 }

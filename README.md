@@ -1,14 +1,5 @@
 # NickelStorygraph
 
-## Announcement - Please Read!
-
-> Update 11/16/2026 - The StoryGraph appears to have made a change to their website that blocks apps like this plugin from reaching book information pages. Unfortunately, these pages are currently used for several key aspects of the plugin, most importantly updating reading progress. This change has likely broken all currently released versions of NickelStorygraph.
-> <br><br>
-A key sign that you're experiencing this issue is that the home screen functionality still works as expected, but syncing shows a "Cloudflare bot check" error. **Your cookies are fine; you do not need to replace them.**
-<br><br>
-> I'm currently testing an updated version that gets this information from other StoryGraph pages, and I'll release it once the core functionality is working again, hopefully within the next few days. However, based on my initial analysis, some functionality (such as viewing and switching book editions on your device) may not have an alternative approach at this time. I'll post more updates as I learn more.
-
-
 ## About 
 A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygraph.com). Syncs your reading progress automatically, logs highlights and notes as journal entries, and lets you view common StorygGraph features directly from your device.
 
@@ -35,7 +26,7 @@ A Kobo eReader plugin that integrates with [StoryGraph](https://app.thestorygrap
 - **Progress sync** — Automatically updates your StoryGraph reading progress as you read, configurable by threshold or on book close
 - **Auto-link** — Identifies the correct StoryGraph digital edition via ISBN or title/author search when you open a book for the first time
 - **Edition management** — Manually link to any edition, switch editions, or sync your edition from changes made on the StoryGraph website
-- **Book status** — Set Want to Read, Currently Reading, Paused, Read, or Did Not Finish from the device; rereading is detected automatically when you re-open a finished book
+- **Book status** — Set Want to Read, Currently Reading, Paused, Read, or Did Not Finish from the device; opening, syncing or turning on auto-sync for a book you've finished asks whether to start a reread
 
 ### Journal & reviews
 
@@ -226,6 +217,11 @@ See [Common mistakes](#logging-in-to-storygraph) under Logging in. The usual cau
 
 **Syncing used to work but now I get an error about my session or credentials.**
 Your session cookies have expired. Log back in to StoryGraph in a browser, copy fresh values for `_storygraph_session` and `remember_user_token`, and update `config.ini` ([Logging in](#logging-in-to-storygraph), Steps 1 and 3).
+
+**Syncing fails with a "Cloudflare bot check" error but other functionality still works.**
+StoryGraph may temporarily be limiting access. This has happened before and was lifted after a couple of days, so it may be temporary. Your cookies are fine; you don't need to replace them.
+- **Update to version 1.0.1 or later of this plugin.** It falls back to other StoryGraph pages while book pages are blocked, so syncing keeps working for books on your *Currently Reading* shelf. Features that can't work during a block, such as viewing or switching editions, show a message saying so.
+- **Try again later**, or make the change on the StoryGraph website.
 
 **A book can't be found or links to the wrong edition.**
 Use **Book management → Manually link book** to search for the correct edition and link it. Once linked, all future syncs use that edition directly.
